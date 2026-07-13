@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Trading Pro Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --accent-color: #3b82f6;
+      --accent-hover: #2563eb;
+      --buy-color: #10b981;
+      --sell-color: #ef4444;
+      --hold-color: #f59e0b;
+      --font-main: 'Inter', sans-serif;
+      --font-display: 'Outfit', sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg-color);
+      background-image: 
+        radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15), transparent 25%),
+        radial-gradient(circle at 85% 30%, rgba(16, 185, 129, 0.15), transparent 25%);
+      color: var(--text-primary);
+      font-family: var(--font-main);
+      min-height: 100vh;
+      display: flex;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 260px;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(12px);
+      border-right: 1px solid var(--card-border);
+      padding: 2rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .brand {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #60a5fa, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin: 0;
+    }
+
+    .nav-links {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .nav-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      text-align: left;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-family: var(--font-main);
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-primary);
+    }
+
+    .nav-btn.active {
+      background: var(--accent-color);
+      color: white;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      padding: 2rem 3rem;
+      overflow-y: auto;
+      height: 100vh;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+    }
+
+    h1.page-title {
+      font-family: var(--font-display);
+      font-size: 2rem;
+      margin: 0;
+    }
+
+    .controls {
+      display: flex;
+      gap: 1rem;
+      background: var(--card-bg);
+      padding: 0.5rem;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(8px);
+    }
+
+    select, input, button {
+      font-family: var(--font-main);
+      font-size: 0.95rem;
+      padding: 0.6rem 1rem;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.2);
+      color: white;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    select:focus, input:focus {
+      border-color: var(--accent-color);
+    }
+
+    button.primary {
+      background: var(--accent-color);
+      color: white;
+      border: none;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+    }
+
+    button.primary:hover {
+      background: var(--accent-hover);
+    }
+    
+    .chart-guide {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .guide-tag {
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-weight: 600;
+      font-size: 0.75rem;
+    }
+    .guide-buy { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .guide-sell { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+    /* Responsive */
+    .view-section {
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    .view-section.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Cards & Grids */
+    .glass-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    }
+
+    .grid-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.5rem;
+    }
+
+    /* Dashboard Specific */
+    .dashboard-top {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-box {
+      text-align: center;
+    }
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+    }
+    .stat-val {
+      font-size: 1.5rem;
+      font-weight: 700;
+      font-family: var(--font-display);
+    }
+    .val-buy { color: var(--buy-color); }
+    .val-sell { color: var(--sell-color); }
+    .val-hold { color: var(--hold-color); }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .chart-container {
+      position: relative;
+      height: 350px;
+      width: 100%;
+    }
+
+    .dashboard-lists {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.5rem;
+    }
+
+    ul {
+      padding-left: 1.2rem;
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+    ul li { margin-bottom: 0.5rem; }
+
+    /* Focus Card */
+    .focus-card {
+      transition: transform 0.2s;
+    }
+    .focus-card:hover {
+      transform: translateY(-5px);
+    }
+    .focus-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 1rem;
+    }
+    .focus-symbol { font-family: var(--font-display); font-size: 1.25rem; font-weight: 700; }
+    .focus-name { color: var(--text-secondary); font-size: 0.9rem; }
+    .focus-score { font-size: 1.5rem; font-weight: 700; color: var(--accent-color); }
+    .focus-row { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.95rem; }
+
+    .loader {
+      display: none;
+      text-align: center;
+      padding: 3rem;
+      color: var(--text-secondary);
+    }
+    .loader.active { display: block; }
+
+    @media (max-width: 768px) {
+      body { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        padding: 1rem;
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+        border-right: none;
+        border-bottom: 1px solid var(--card-border);
+        gap: 1rem;
+      }
+      .nav-links {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+      .nav-btn {
+        padding: 0.5rem 0.8rem;
+        font-size: 0.85rem;
+      }
+      .main-content {
+        padding: 1rem;
+        height: auto;
+      }
+      header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+      h1.page-title { font-size: 1.5rem; }
+      .controls {
+        width: 100%;
+        flex-direction: column;
+      }
+      .chart-grid, .dashboard-lists, .dashboard-extra {
+        grid-template-columns: 1fr !important;
+      }
+      .chart-container {
+        height: 250px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <h1 class="brand">StockPro</h1>
+    <nav class="nav-links">
+      <button class="nav-btn active" onclick="switchTab('today-focus')">Today Focus</button>
+      <button class="nav-btn" onclick="switchTab('screener')">Screener</button>
+      <button class="nav-btn" onclick="switchTab('dashboard')">Analysis Dashboard</button>
+    </nav>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    
+    <header>
+      <h1 class="page-title" id="page-title">Today Focus</h1>
+      <div class="controls">
+        <select id="global-exchange">
+          <option value="KRX">KRX (한국)</option>
+          <option value="NAS">NASDAQ</option>
+          <option value="NYS">NYSE</option>
+        </select>
+        <input type="text" id="global-symbol" placeholder="종목코드/티커 (ex: 005930)" style="display:none;" />
+        <button class="primary" id="action-btn" onclick="executeCurrentTab()">불러오기</button>
+      </div>
+    </header>
+
+    <div id="loader" class="loader">
+      데이터를 분석 중입니다. 잠시만 기다려주세요...
+    </div>
+
+    <!-- TAB 1: Today Focus -->
+    <section id="today-focus" class="view-section active">
+      <div id="focus-container" class="grid-cards">
+        <div style="color:var(--text-secondary); grid-column: 1/-1;">우측 상단의 '불러오기' 버튼을 눌러 추천 종목을 검색하세요.</div>
+      </div>
+    </section>
+
+    <!-- TAB 2: Screener -->
+    <section id="screener" class="view-section">
+      <div class="glass-card" style="margin-bottom: 1.5rem;">
+        <h3 style="margin-top:0;">필터 설정</h3>
+        <div style="display:flex; gap:1rem; flex-wrap:wrap;">
+          <div style="flex: 1; min-width: 150px;">
+            <label style="font-size:0.8rem; color:var(--text-secondary); display:block; margin-bottom:0.3rem;">최소 가격</label>
+            <input type="number" id="min-price" placeholder="기본값 사용" style="width: 100%;" />
+          </div>
+          <div style="flex: 1; min-width: 150px;">
+            <label style="font-size:0.8rem; color:var(--text-secondary); display:block; margin-bottom:0.3rem;">최대 가격</label>
+            <input type="number" id="max-price" placeholder="기본값 사용" style="width: 100%;" />
+          </div>
+          <div style="flex: 1; min-width: 150px;">
+            <label style="font-size:0.8rem; color:var(--text-secondary); display:block; margin-bottom:0.3rem;">최소 거래량</label>
+            <input type="number" id="min-vol" value="1000000" style="width: 100%;" />
+          </div>
+        </div>
+      </div>
+      <div id="screener-container" class="grid-cards"></div>
+    </section>
+
+    <!-- TAB 3: Dashboard -->
+    <section id="dashboard" class="view-section">
+      <div id="dash-content" style="display:none;">
+        <div class="dashboard-top">
+          <div class="glass-card stat-box">
+            <div class="stat-label">종합 의견</div>
+            <div id="dash-action-score" class="stat-val">-</div>
+          </div>
+          <div class="glass-card stat-box">
+            <div class="stat-label">현재가</div>
+            <div id="dash-price" class="stat-val">-</div>
+          </div>
+          <div class="glass-card stat-box" style="border: 1px solid rgba(16, 185, 129, 0.5); background: rgba(16, 185, 129, 0.05);">
+            <div class="stat-label">💡 권장 매수가</div>
+            <div id="dash-rec-buy" class="stat-val" style="color:#10b981;">-</div>
+          </div>
+          <div class="glass-card stat-box">
+            <div class="stat-label">🎯 1차 목표가</div>
+            <div id="dash-target" class="stat-val" style="color:#ef4444;">-</div>
+          </div>
+          <div class="glass-card stat-box">
+            <div class="stat-label">⚠️ 손절 라인</div>
+            <div id="dash-stoploss" class="stat-val">-</div>
+          </div>
+        </div>
+
+          <div class="chart-grid">
+            <div class="glass-card">
+              <h3 style="margin-bottom:0.5rem; color:var(--text-secondary);">가격 및 이동평균선</h3>
+              <div class="chart-guide">
+                <div><span class="guide-tag guide-buy">골든크로스(매수)</span> 20일선이 60일선을 상향 돌파</div>
+                <div><span class="guide-tag guide-sell">데드크로스(주의)</span> 20일선이 60일선을 하향 돌파</div>
+              </div>
+              <div class="chart-container">
+                <canvas id="price-chart"></canvas>
+              </div>
+            </div>
+            <div class="glass-card">
+              <h3 style="margin-bottom:0.5rem; color:var(--text-secondary);">RSI (상대강도지수)</h3>
+              <div class="chart-guide">
+                <div><span class="guide-tag guide-sell">70 이상</span> 과열 (수익실현 고려)</div>
+                <div><span class="guide-tag guide-buy">30 이하</span> 침체 (매수 찬스)</div>
+              </div>
+              <div class="chart-container">
+                <canvas id="rsi-chart"></canvas>
+              </div>
+            </div>
+          </div>
+
+        <div class="dashboard-lists">
+          <div class="glass-card">
+            <h3 style="margin-top:0; font-size:1rem; color:var(--buy-color);">긍정 신호</h3>
+            <ul id="dash-reasons"></ul>
+          </div>
+          <div class="glass-card">
+            <h3 style="margin-top:0; font-size:1rem; color:var(--sell-color);">위험 신호</h3>
+            <ul id="dash-sell-signals"></ul>
+          </div>
+          <div class="glass-card">
+            <h3 style="margin-top:0; font-size:1rem; color:var(--hold-color);">주의 사항</h3>
+            <ul id="dash-cautions"></ul>
+          </div>
+        </div>
+        
+        <div class="dashboard-extra" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
+          <!-- Fundamentals Panel -->
+          <div class="glass-card">
+            <h3 style="margin-top:0; font-size:1rem; color:var(--text-primary);">기업 펀더멘털 요약</h3>
+            <div id="dash-fundamentals" style="display: flex; flex-direction: column; gap: 0.8rem; margin-top: 1rem;">
+              <div style="display:flex; justify-content:space-between; border-bottom: 1px solid var(--card-border); padding-bottom: 0.5rem;">
+                <span style="color:var(--text-secondary);">시가총액</span>
+                <span id="funda-mcap" style="font-weight:600;">-</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; border-bottom: 1px solid var(--card-border); padding-bottom: 0.5rem;">
+                <span style="color:var(--text-secondary);">PER / PBR</span>
+                <span id="funda-perpbr" style="font-weight:600;">- / -</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; border-bottom: 1px solid var(--card-border); padding-bottom: 0.5rem;">
+                <span style="color:var(--text-secondary);">EPS</span>
+                <span id="funda-eps" style="font-weight:600;">-</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; padding-bottom: 0.5rem;">
+                <span style="color:var(--text-secondary);">52주 최고/최저</span>
+                <span id="funda-52w" style="font-weight:600;">- / -</span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Order Book Panel -->
+          <div class="glass-card">
+            <h3 style="margin-top:0; font-size:1rem; color:var(--text-primary);">실시간 호가 (Order Book)</h3>
+            <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:var(--text-secondary); margin-bottom:0.5rem;">
+              <span>매도/매수 잔량</span>
+              <span>호가</span>
+            </div>
+            <div id="dash-orderbook" style="display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem;">
+              <!-- Javascript will populate this -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- AI Insights Panel -->
+        <div style="margin-top: 1.5rem;">
+          <h3 style="margin-top:0; font-size:1.1rem; color:var(--text-primary); margin-bottom: 1rem;">💡 수급 & 가치 진단 (AI 인사이트)</h3>
+          <div class="dashboard-lists">
+            <div class="glass-card">
+              <h3 style="margin-top:0; font-size:1rem; color:var(--buy-color);">긍정 신호</h3>
+              <ul id="dash-ai-positive"></ul>
+            </div>
+            <div class="glass-card">
+              <h3 style="margin-top:0; font-size:1rem; color:var(--sell-color);">위험 신호</h3>
+              <ul id="dash-ai-negative"></ul>
+            </div>
+            <div class="glass-card">
+              <h3 style="margin-top:0; font-size:1rem; color:var(--hold-color);">주의 사항</h3>
+              <ul id="dash-ai-neutral"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    let currentTab = 'today-focus';
+    let priceChartInstance = null;
+    let rsiChartInstance = null;
+
+    Chart.defaults.color = '#94a3b8';
+    Chart.defaults.font.family = "'Inter', sans-serif";
+
+    function switchTab(tabId) {
+      currentTab = tabId;
+      document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+      
+      document.getElementById(tabId).classList.add('active');
+      event.target.classList.add('active');
+
+      const symbolInput = document.getElementById('global-symbol');
+      if (tabId === 'dashboard') {
+        document.getElementById('page-title').innerText = 'Analysis Dashboard';
+        symbolInput.style.display = 'inline-block';
+        document.getElementById('action-btn').innerText = '분석하기';
+      } else if (tabId === 'screener') {
+        document.getElementById('page-title').innerText = 'Screener';
+        symbolInput.style.display = 'none';
+        document.getElementById('action-btn').innerText = '검색하기';
+      } else {
+        document.getElementById('page-title').innerText = 'Today Focus';
+        symbolInput.style.display = 'none';
+        document.getElementById('action-btn').innerText = '불러오기';
+      }
+    }
+
+    async function executeCurrentTab() {
+      const exchange = document.getElementById('global-exchange').value;
+      const loader = document.getElementById('loader');
+      loader.classList.add('active');
+
+      try {
+        if (currentTab === 'today-focus') {
+          document.getElementById('focus-container').innerHTML = '';
+          const res = await fetch(`/api/today-focus?exchange=${exchange}`);
+          const data = await res.json();
+          renderTodayFocus(data);
+        } else if (currentTab === 'screener') {
+          document.getElementById('screener-container').innerHTML = '';
+          let query = `?exchange=${exchange}`;
+          const minP = document.getElementById('min-price').value;
+          const maxP = document.getElementById('max-price').value;
+          const minV = document.getElementById('min-vol').value;
+          if(minP) query += `&minimum_price=${minP}`;
+          if(maxP) query += `&maximum_price=${maxP}`;
+          if(minV) query += `&minimum_volume=${minV}`;
+          
+          const res = await fetch(`/api/screener${query}`);
+          const data = await res.json();
+          renderScreener(data);
+        } else if (currentTab === 'dashboard') {
+          document.getElementById('dash-content').style.display = 'none';
+          const symbol = document.getElementById('global-symbol').value;
+          if(!symbol) { alert('종목코드/티커를 입력하세요.'); loader.classList.remove('active'); return; }
+          
+          const res = await fetch(`/api/dashboard/${encodeURIComponent(symbol)}?exchange=${exchange}`);
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || '종목을 찾을 수 없거나 데이터가 부족합니다.');
+          }
+          
+          // 추가 펀더멘털 및 호가창 데이터 패치
+          try {
+            const extraRes = await fetch(`/api/dashboard/${encodeURIComponent(symbol)}/extra?exchange=${exchange}`);
+            if (extraRes.ok) {
+              const extraData = await extraRes.json();
+              renderDashboardExtra(extraData);
+            }
+          } catch (e) {
+            console.error("Failed to fetch extra data:", e);
+          }
+
+          renderDashboard(data);
+        }
+      } catch (err) {
+        console.error(err);
+        alert(err.message || '요청 처리 중 오류가 발생했습니다.');
+      } finally {
+        loader.classList.remove('active');
+      }
+    }
+
+    function renderTodayFocus(data) {
+      const container = document.getElementById('focus-container');
+      if(!data.focus_stocks || data.focus_stocks.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-secondary); grid-column:1/-1;">조회된 종목이 없거나 데이터가 부족합니다.</div>';
+        return;
+      }
+
+      data.focus_stocks.forEach(stock => {
+        const actionClass = stock.analysis.action.includes('매수') ? 'val-buy' : 
+                            stock.analysis.action.includes('매도') ? 'val-sell' : 'val-hold';
+        
+        container.innerHTML += `
+          <div class="glass-card focus-card">
+            <div class="focus-header">
+              <div>
+                <div class="focus-symbol">${stock.symbol}</div>
+                <div class="focus-name">${stock.name}</div>
+              </div>
+              <div class="focus-score">${stock.analysis.score}점</div>
+            </div>
+            <div class="focus-row">
+              <span style="color:var(--text-secondary)">현재가</span>
+              <span>${stock.current_price.toLocaleString()}</span>
+            </div>
+            <div class="focus-row">
+              <span style="color:var(--text-secondary)">판단</span>
+              <span class="${actionClass}" style="font-weight:600;">${stock.analysis.action}</span>
+            </div>
+            <div class="focus-row">
+              <span style="color:var(--text-secondary)">RSI</span>
+              <span>${stock.analysis.indicators?.rsi_14 || '-'}</span>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    function renderScreener(data) {
+      const container = document.getElementById('screener-container');
+      if(!data.candidates || data.candidates.length === 0) {
+        container.innerHTML = '<div style="color:var(--text-secondary); grid-column:1/-1;">조건에 맞는 종목이 없습니다.</div>';
+        return;
+      }
+      data.candidates.forEach(stock => {
+        container.innerHTML += `
+          <div class="glass-card focus-card">
+            <div class="focus-header">
+              <div>
+                <div class="focus-symbol">${stock.symbol}</div>
+                <div class="focus-name">${stock.name}</div>
+              </div>
+            </div>
+            <div class="focus-row">
+              <span style="color:var(--text-secondary)">가격</span>
+              <span>${Number(stock.price).toLocaleString()}</span>
+            </div>
+            <div class="focus-row">
+              <span style="color:var(--text-secondary)">거래량</span>
+              <span>${Number(stock.volume).toLocaleString()}</span>
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    function renderList(elementId, items, emptyMsg) {
+      const el = document.getElementById(elementId);
+      el.innerHTML = '';
+      if (!items || items.length === 0) {
+        el.innerHTML = `<li>${emptyMsg}</li>`;
+        return;
+      }
+      items.forEach(item => {
+        el.innerHTML += `<li>${item}</li>`;
+      });
+    }
+
+    function renderDashboardExtra(extraData) {
+      const f = extraData.fundamentals || {};
+      const ob = extraData.order_book || { asks: [], bids: [] };
+      
+      // Fundamentals
+      const formatNum = (num) => num ? num.toLocaleString() : 'N/A';
+      document.getElementById('funda-mcap').innerText = f.mcap ? (f.currency === 'KRW' ? (f.mcap / 100000000).toLocaleString(undefined, {maximumFractionDigits:0}) + ' 억 원' : formatNum(f.mcap) + ' ' + f.currency) : 'N/A';
+      document.getElementById('funda-perpbr').innerText = `${f.per || 'N/A'} / ${f.pbr || 'N/A'}`;
+      document.getElementById('funda-eps').innerText = formatNum(f.eps);
+      document.getElementById('funda-52w').innerText = `${formatNum(f.high52)} / ${formatNum(f.low52)}`;
+
+      // Order Book
+      const obContainer = document.getElementById('dash-orderbook');
+      obContainer.innerHTML = '';
+      
+      const maxVol = Math.max(
+        ...ob.asks.map(a => a.volume), 
+        ...ob.bids.map(b => b.volume),
+        1
+      );
+
+      // Asks (매도) - 그려질 때는 높은 가격이 위로 가도록
+      ob.asks.forEach(ask => {
+        const pct = (ask.volume / maxVol) * 100;
+        obContainer.innerHTML += `
+          <div style="display:flex; justify-content:space-between; align-items:center; background: linear-gradient(90deg, transparent ${100-pct}%, rgba(59, 130, 246, 0.15) ${100-pct}%); padding: 4px 8px; border-radius: 4px;">
+            <span style="color:var(--text-secondary); width:50%; text-align:left;">${ask.volume.toLocaleString()}</span>
+            <span style="color:#3b82f6; font-weight:600; width:50%; text-align:right;">${ask.price.toLocaleString()}</span>
+          </div>
+        `;
+      });
+
+      // Bids (매수) - 높은 가격이 위로
+      ob.bids.forEach(bid => {
+        const pct = (bid.volume / maxVol) * 100;
+        obContainer.innerHTML += `
+          <div style="display:flex; justify-content:space-between; align-items:center; background: linear-gradient(90deg, rgba(239, 68, 68, 0.15) ${pct}%, transparent ${pct}%); padding: 4px 8px; border-radius: 4px;">
+            <span style="color:var(--text-secondary); width:50%; text-align:left;">${bid.volume.toLocaleString()}</span>
+            <span style="color:#ef4444; font-weight:600; width:50%; text-align:right;">${bid.price.toLocaleString()}</span>
+          </div>
+        `;
+      });
+      
+      if(ob.asks.length === 0 && ob.bids.length === 0) {
+        obContainer.innerHTML = '<div style="color:var(--text-secondary); padding:1rem; text-align:center;">호가 데이터가 없습니다. (장 휴장 등)</div>';
+      }
+
+      // AI Insights
+      const elPos = document.getElementById('dash-ai-positive');
+      const elNeg = document.getElementById('dash-ai-negative');
+      const elNeu = document.getElementById('dash-ai-neutral');
+      elPos.innerHTML = '';
+      elNeg.innerHTML = '';
+      elNeu.innerHTML = '';
+
+      if (extraData.extra_analysis && extraData.extra_analysis.insights) {
+        let posCount = 0, negCount = 0, neuCount = 0;
+        extraData.extra_analysis.insights.forEach(insight => {
+          const li = `<li>${insight.msg}</li>`;
+          if (insight.type === 'positive') { elPos.innerHTML += li; posCount++; }
+          else if (insight.type === 'warning' || insight.type === 'negative') { elNeg.innerHTML += li; negCount++; }
+          else { elNeu.innerHTML += li; neuCount++; }
+        });
+        
+        if (posCount === 0) elPos.innerHTML = '<li style="color:var(--text-secondary);">해당 사항 없음</li>';
+        if (negCount === 0) elNeg.innerHTML = '<li style="color:var(--text-secondary);">해당 사항 없음</li>';
+        if (neuCount === 0) elNeu.innerHTML = '<li style="color:var(--text-secondary);">해당 사항 없음</li>';
+      } else {
+        elPos.innerHTML = '<li style="color:var(--text-secondary);">분석 데이터 없음</li>';
+        elNeg.innerHTML = '<li style="color:var(--text-secondary);">분석 데이터 없음</li>';
+        elNeu.innerHTML = '<li style="color:var(--text-secondary);">분석 데이터 없음</li>';
+      }
+    }
+
+    function renderDashboard(data) {
+      const analysis = data.analysis;
+      document.getElementById('dash-content').style.display = 'block';
+      document.getElementById('page-title').innerText = `Analysis Dashboard - ${data.name} (${data.symbol})`;
+      
+      const actionScoreEl = document.getElementById('dash-action-score');
+      actionScoreEl.innerText = `${analysis.action} (${analysis.score}점)`;
+      actionScoreEl.className = 'stat-val ' + (analysis.action.includes('매수') ? 'val-buy' : analysis.action.includes('매도') ? 'val-sell' : 'val-hold');
+
+      document.getElementById('dash-price').innerText = analysis.price ? analysis.price.toLocaleString() : '-';
+      document.getElementById('dash-rec-buy').innerText = analysis.recommended_buy_price ? analysis.recommended_buy_price.toLocaleString() : '-';
+      document.getElementById('dash-target').innerText = analysis.target_price ? analysis.target_price.toLocaleString() : '-';
+      document.getElementById('dash-stoploss').innerText = analysis.stop_loss_price ? analysis.stop_loss_price.toLocaleString() : '-';
+
+      renderList('dash-reasons', analysis.reasons, '뚜렷한 긍정 신호가 없습니다.');
+      renderList('dash-sell-signals', analysis.sell_signals, '감지된 위험 신호가 없습니다.');
+      renderList('dash-cautions', analysis.cautions, '특별한 주의 신호가 없습니다.');
+
+      const chart = data.chart;
+      if (priceChartInstance) priceChartInstance.destroy();
+      if (rsiChartInstance) rsiChartInstance.destroy();
+
+      priceChartInstance = new Chart(document.getElementById('price-chart'), {
+        type: 'line',
+        data: {
+          labels: chart.labels,
+          datasets: [
+            { label: '종가', data: chart.close, borderColor: '#3b82f6', borderWidth: 2, pointRadius: 0 },
+            { label: '20일선', data: chart.sma_20, borderColor: '#10b981', borderWidth: 1.5, pointRadius: 0 },
+            { label: '60일선', data: chart.sma_60, borderColor: '#f59e0b', borderWidth: 1.5, pointRadius: 0 },
+          ]
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false, 
+          interaction: { mode: 'index', intersect: false },
+          plugins: { 
+            legend: { position: 'top' },
+            tooltip: {
+              enabled: true,
+              mode: 'index',
+              intersect: false
+            }
+          } 
+        }
+      });
+
+      rsiChartInstance = new Chart(document.getElementById('rsi-chart'), {
+        type: 'line',
+        data: {
+          labels: chart.labels,
+          datasets: [
+            { label: 'RSI (14)', data: chart.rsi_14, borderColor: '#8b5cf6', borderWidth: 2, pointRadius: 0 },
+            { label: '과열 (70)', data: chart.labels.map(()=>70), borderColor: '#ef4444', borderDash: [5,5], pointRadius: 0 },
+            { label: '과매도 (30)', data: chart.labels.map(()=>30), borderColor: '#3b82f6', borderDash: [5,5], pointRadius: 0 },
+          ]
+        },
+        options: { 
+          responsive: true, 
+          maintainAspectRatio: false, 
+          interaction: { mode: 'index', intersect: false },
+          plugins: { 
+            legend: { position: 'top' },
+            tooltip: {
+              enabled: true,
+              mode: 'index',
+              intersect: false
+            }
+          } 
+        }
+      });
+    }
+  </script>
+</body>
+</html>

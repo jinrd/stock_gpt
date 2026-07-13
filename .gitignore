@@ -1,0 +1,6 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+.kis_token.json
+.DS_Store

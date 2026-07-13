@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stock Trading GPT</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      :root {
+        color: #edf2f4;
+        background: #101714;
+        font-family: Arial, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+      }
+
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 40px 24px 72px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+      }
+
+      .subtitle {
+        color: #91a299;
+        margin-top: 8px;
+      }
+
+      .search {
+        display: flex;
+        gap: 10px;
+        margin: 30px 0;
+      }
+
+      input, select, button {
+        border: 1px solid #3f5147;
+        border-radius: 8px;
+        padding: 12px 14px;
+        font-size: 14px;
+      }
+
+      input, select {
+        background: #18231e;
+        color: #edf2f4;
+      }
+
+      input {
+        width: 160px;
+      }
+
+      button {
+        background: #c7e94c;
+        border: 0;
+        color: #172017;
+        cursor: pointer;
+        font-weight: bold;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .summary {
+        display: grid;
+        grid-template-columns: 1.35fr repeat(4, 1fr);
+        gap: 12px;
+        margin-bottom: 24px;
+      }
+
+      .card {
+        background: #18231e;
+        border: 1px solid #304238;
+        border-radius: 12px;
+        padding: 20px;
+      }
+
+      .label {
+        color: #91a299;
+        font-size: 12px;
+      }
+
+      .value {
+        margin-top: 9px;
+        font-size: 25px;
+        font-weight: bold;
+      }
+
+      .action-buy {
+        color: #c7e94c;
+      }
+
+      .action-watch {
+        color: #ffcc66;
+      }
+
+      .action-sell {
+        color: #ff7b72;
+      }
+
+      .charts {
+        display: grid;
+        gap: 20px;
+      }
+
+      .chart-card {
+        min-height: 350px;
+      }
+
+      .chart-card h2 {
+        margin-top: 0;
+        font-size: 16px;
+      }
+
+      .chart-container {
+        position: relative;
+        height: 300px;
+        width: 100%;
+      }
+
+      .details {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 20px;
+      }
+
+      ul {
+        padding-left: 20px;
+        color: #c8d4cd;
+        line-height: 1.8;
+      }
+
+      #message {
+        color: #ffb4ae;
+        margin: 12px 0;
+      }
+
+      @media (max-width: 720px) {
+        .summary, .details {
+          grid-template-columns: 1fr;
+        }
+
+        .search {
+          flex-wrap: wrap;
+        }
+      }
+    </style>
+  </head>
+
+  <body>
+    <main>
+      <h1>Stock Trading GPT</h1>
+      <p class="subtitle">국내/해외주식 기술지표 분석 대시보드</p>
+
+      <div class="search">
+        <input id="symbol" value="005930" placeholder="종목코드/티커 입력" />
+        <select id="exchange">
+          <option value="NAS">NASDAQ</option>
+          <option value="NYS">NYSE</option>
+          <option value="AMS">AMEX</option>
+          <option value="KRX" selected>KRX (한국)</option>
+        </select>
+        <button id="analyze-button">분석하기</button>
+      </div>
+
+      <p id="message"></p>
+
+      <section id="result" class="hidden">
+        <div class="summary">
+          <article class="card">
+            <p class="label">판단</p>
+            <p id="action" class="value"></p>
+            <p id="symbol-title" class="label"></p>
+          </article>
+
+          <article class="card">
+            <p class="label">현재가</p>
+            <p id="price" class="value"></p>
+          </article>
+
+          <article class="card">
+            <p class="label">종합 점수</p>
+            <p id="score" class="value"></p>
+          </article>
+
+          <article class="card">
+            <p class="label">RSI (14)</p>
+            <p id="rsi" class="value"></p>
+          </article>
+
+          <article class="card">
+            <p class="label">손절 기준가(ATR)</p>
+            <p id="stop-loss" class="value"></p>
+          </article>
+        </div>
+
+        <section class="charts">
+          <article class="card chart-card">
+            <h2>가격 및 이동평균선</h2>
+            <div class="chart-container">
+              <canvas id="price-chart"></canvas>
+            </div>
+          </article>
+
+          <article class="card chart-card">
+            <h2>RSI (14)</h2>
+            <div class="chart-container">
+              <canvas id="rsi-chart"></canvas>
+            </div>
+          </article>
+        </section>
+
+        <section class="details">
+          <article class="card">
+            <h2>👍 긍정 신호 (Buy Score: <span id="buy-score-display">0</span>)</h2>
+            <ul id="reasons"></ul>
+          </article>
+
+          <article class="card">
+            <h2>⚠️ 주의 신호</h2>
+            <ul id="cautions"></ul>
+          </article>
+
+          <article class="card" style="grid-column: span 2;">
+            <h2>🚨 위험/매도 신호 (Sell Risk Score: <span id="sell-score-display">0</span>)</h2>
+            <ul id="sell-signals"></ul>
+          </article>
+        </section>
+      </section>
+    </main>
+
+    <script>
+      let priceChart;
+      let rsiChart;
+
+      const numberFormat = new Intl.NumberFormat("en-US", {
+        maximumFractionDigits: 2,
+      });
+
+      function renderList(elementId, items, fallbackText) {
+        const element = document.getElementById(elementId);
+        element.innerHTML = "";
+
+        const content = items.length ? items : [fallbackText];
+
+        content.forEach((item) => {
+          const listItem = document.createElement("li");
+          listItem.textContent = item;
+          element.appendChild(listItem);
+        });
+      }
+
+      function createCharts(chart) {
+        if (priceChart) priceChart.destroy();
+        if (rsiChart) rsiChart.destroy();
+
+        priceChart = new Chart(
+          document.getElementById("price-chart"),
+          {
+            type: "line",
+            data: {
+              labels: chart.labels,
+              datasets: [
+                {
+                  label: "종가",
+                  data: chart.close,
+                  borderColor: "#c7e94c",
+                  borderWidth: 2,
+                  pointRadius: 0,
+                },
+                {
+                  label: "20일선",
+                  data: chart.sma_20,
+                  borderColor: "#65b8ff",
+                  borderWidth: 1.5,
+                  pointRadius: 0,
+                },
+                {
+                  label: "60일선",
+                  data: chart.sma_60,
+                  borderColor: "#f4b660",
+                  borderWidth: 1.5,
+                  pointRadius: 0,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                x: { ticks: { maxTicksLimit: 8 } },
+              },
+            },
+          },
+        );
+
+        rsiChart = new Chart(
+          document.getElementById("rsi-chart"),
+          {
+            type: "line",
+            data: {
+              labels: chart.labels,
+              datasets: [
+                {
+                  label: "RSI (14)",
+                  data: chart.rsi_14,
+                  borderColor: "#d89cff",
+                  borderWidth: 2,
+                  pointRadius: 0,
+                },
+                {
+                  label: "과열 기준",
+                  data: chart.labels.map(() => 70),
+                  borderColor: "#ff7b72",
+                  borderDash: [6, 6],
+                  pointRadius: 0,
+                },
+                {
+                  label: "과매도 기준",
+                  data: chart.labels.map(() => 30),
+                  borderColor: "#65b8ff",
+                  borderDash: [6, 6],
+                  pointRadius: 0,
+                },
+              ],
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              scales: {
+                y: {
+                  min: 0,
+                  max: 100,
+                },
+                x: { ticks: { maxTicksLimit: 8 } },
+              },
+            },
+          },
+        );
+      }
+
+      function renderDashboard(data) {
+        const analysis = data.analysis;
+
+        document.getElementById("symbol-title").textContent =
+          `${data.symbol} · ${data.exchange}`;
+
+        const action = document.getElementById("action");
+        action.textContent = analysis.action;
+        action.className = "value";
+
+        if (analysis.action === "매수 검토") {
+          action.classList.add("action-buy");
+        } else if (analysis.action === "관망") {
+          action.classList.add("action-watch");
+        } else {
+          action.classList.add("action-sell");
+        }
+
+        document.getElementById("price").textContent =
+          `$${numberFormat.format(analysis.price)}`;
+        document.getElementById("score").textContent =
+          `${analysis.buy_score} / 9`;
+        document.getElementById("rsi").textContent =
+          analysis.indicators.rsi_14;
+        document.getElementById("stop-loss").textContent =
+          `$${numberFormat.format(analysis.stop_loss_price)}`;
+          
+        document.getElementById("buy-score-display").textContent = analysis.buy_score;
+        document.getElementById("sell-score-display").textContent = analysis.sell_risk_score;
+
+        renderList("reasons", analysis.reasons, "뚜렷한 긍정 신호가 없습니다.");
+        renderList("cautions", analysis.cautions, "특별한 주의 신호가 없습니다.");
+        renderList("sell-signals", analysis.sell_signals, "감지된 위험/매도 신호가 없습니다.");
+
+        createCharts(data.chart);
+        document.getElementById("result").classList.remove("hidden");
+      }
+
+      async function loadDashboard() {
+        const symbol = document.getElementById("symbol").value.trim();
+        const exchange = document.getElementById("exchange").value;
+        const message = document.getElementById("message");
+
+        if (!symbol) {
+          message.textContent = "티커를 입력하세요.";
+          return;
+        }
+
+        message.textContent = "분석 데이터를 불러오는 중입니다...";
+        document.getElementById("result").classList.add("hidden");
+
+        try {
+          const response = await fetch(
+            `/api/dashboard/${encodeURIComponent(symbol)}?exchange=${exchange}`,
+          );
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.detail || "분석 요청에 실패했습니다.");
+          }
+
+          renderDashboard(data);
+          message.textContent = "";
+        } catch (error) {
+          message.textContent = error.message;
+        }
+      }
+
+      document
+        .getElementById("analyze-button")
+        .addEventListener("click", loadDashboard);
+
+      document
+        .getElementById("symbol")
+        .addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            loadDashboard();
+          }
+        });
+
+      loadDashboard();
+    </script>
+  </body>
+</html>
