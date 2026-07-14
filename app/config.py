@@ -24,8 +24,8 @@ class Settings:
         return "https://openapi.koreainvestment.com:9443"
 
 
-def get_settings() -> Settings:
-    is_paper = os.getenv("KIS_IS_PAPER", "true").lower() == "true"
+def get_settings(force_mock: bool = False) -> Settings:
+    is_paper = True if force_mock else os.getenv("KIS_IS_PAPER", "true").lower() == "true"
     prefix = "MOCK_" if is_paper and os.getenv("MOCK_APP_KEY") else "KIS_"
 
     required_keys = [

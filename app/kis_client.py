@@ -36,7 +36,9 @@ class KisClient:
             ):
                 return self._access_token
 
-            token_file = ".kis_token.json"
+            # API 키별로 토큰을 따로 저장 (여러 키 동시 사용 지원)
+            key_suffix = self.settings.kis_app_key[-6:] if self.settings.kis_app_key else "default"
+            token_file = f".kis_token_{key_suffix}.json"
             if os.path.exists(token_file):
                 try:
                     with open(token_file, "r") as f:

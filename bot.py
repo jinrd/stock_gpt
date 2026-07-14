@@ -4,15 +4,14 @@ import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
-os.environ["KIS_IS_PAPER"] = "true"
-
 from app.config import get_settings
 from app.kis_client import KisClient
 from app.analysis import analyze_daily_prices, analyze_daily_prices_bear_market
 from notifier import TelegramNotifier
 
 def run_bot():
-    settings = get_settings()
+    # 봇은 무조건 모의투자(MOCK_APP_KEY) 환경으로 구동
+    settings = get_settings(force_mock=True)
     client = KisClient(settings)
     notifier = TelegramNotifier()
     
