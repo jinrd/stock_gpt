@@ -87,7 +87,33 @@ def run_bot():
                 )
                 candidates = candidates[:20] # 상위 20개만
                 
-                for cand in candidates:
+                # 대장주 고정 리스트 (필수 분석)
+                blue_chips = [
+                    {"mksc_shrn_iscd": "005930", "hts_kor_isnm": "삼성전자"},
+                    {"mksc_shrn_iscd": "000660", "hts_kor_isnm": "SK하이닉스"},
+                    {"mksc_shrn_iscd": "373220", "hts_kor_isnm": "LG에너지솔루션"},
+                    {"mksc_shrn_iscd": "005490", "hts_kor_isnm": "POSCO홀딩스"},
+                    {"mksc_shrn_iscd": "006400", "hts_kor_isnm": "삼성SDI"},
+                    {"mksc_shrn_iscd": "005380", "hts_kor_isnm": "현대차"},
+                    {"mksc_shrn_iscd": "000270", "hts_kor_isnm": "기아"},
+                    {"mksc_shrn_iscd": "207940", "hts_kor_isnm": "삼성바이오로직스"},
+                    {"mksc_shrn_iscd": "068270", "hts_kor_isnm": "셀트리온"},
+                    {"mksc_shrn_iscd": "035420", "hts_kor_isnm": "NAVER"},
+                    {"mksc_shrn_iscd": "035720", "hts_kor_isnm": "카카오"},
+                    {"mksc_shrn_iscd": "105560", "hts_kor_isnm": "KB금융"}
+                ]
+                
+                # 기존 검색 결과와 필수 분석 리스트 병합 (중복 제거)
+                seen_symbols = set()
+                final_candidates = []
+                
+                for cand in blue_chips + candidates:
+                    sym = cand.get("mksc_shrn_iscd") or cand.get("symb") or cand.get("pdno")
+                    if sym and sym not in seen_symbols:
+                        seen_symbols.add(sym)
+                        final_candidates.append(cand)
+                
+                for cand in final_candidates:
                     # KIS API 국내주식 거래량 순위 응답 키 처리
                     symbol = cand.get("mksc_shrn_iscd") or cand.get("symb") or cand.get("pdno")
                     name = cand.get("hts_kor_isnm") or cand.get("knam") or cand.get("name")
