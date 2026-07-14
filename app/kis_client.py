@@ -606,11 +606,20 @@ class KisClient:
         # 보유 종목 목록
         stocks = data.get("output1", [])
         
+        tot_evlu_amt = float(summary.get("tot_evlu_amt", 0))
+        pchs_amt_smtl_amt = float(summary.get("pchs_amt_smtl_amt", 0))
+        evlu_pfls_smtl_amt = float(summary.get("evlu_pfls_smtl_amt", 0))
+        
+        # 총 평가 수익률 수동 계산 (KIS API에서 0으로 넘어오는 경우 대비)
+        total_profit_loss_rate = 0.0
+        if pchs_amt_smtl_amt > 0:
+            total_profit_loss_rate = round((evlu_pfls_smtl_amt / pchs_amt_smtl_amt) * 100, 2)
+        
         return {
-            "total_evaluated_amount": float(summary.get("tot_evlu_amt", 0)),
-            "total_purchased_amount": float(summary.get("pchs_amt_smtl_amt", 0)),
-            "total_profit_loss": float(summary.get("evlu_pfls_smtl_amt", 0)),
-            "total_profit_loss_rate": float(summary.get("evlu_pfls_rt", 0)),
+            "total_evaluated_amount": tot_evlu_amt,
+            "total_purchased_amount": pchs_amt_smtl_amt,
+            "total_profit_loss": evlu_pfls_smtl_amt,
+            "total_profit_loss_rate": total_profit_loss_rate,
             "orderable_cash": float(summary.get("prvs_rcdl_excc_amt", 0)), # D+2 예수금
             "stocks": [
                 {

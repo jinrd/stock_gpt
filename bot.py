@@ -141,14 +141,22 @@ def run_bot():
                         current_price = analysis.get("price", 0)
                         
                         if action == "매수 검토" and score >= 2:
-                            # 현금 한도 내에서 1주 매수 테스트 (실전에서는 비중 계산 필요)
-                            if cash >= current_price:
-                                print(f"  🎯 매수 포착! {name}({symbol}): 점수 {score}점 -> 시장가 1주 매수 실행!")
+                            # 1. 점수에 비례한 목표 매수 금액 설정 (1점당 10만 원, 최대 100만 원)
+                            target_amount = score * 100000
+                            
+                            # 2. 현재 계좌의 주문 가능 현금을 초과하지 않도록 보정
+                            target_amount = min(target_amount, cash)
+                            
+                            # 3. 목표 금액으로 살 수 있는 수량 계산
+                            qty = int(target_amount // current_price)
+                            
+                            if qty > 0:
+                                print(f"  🎯 매수 포착! {name}({symbol}): 점수 {score}점 -> 목표금액 {target_amount:,.0f}원 ({qty}주) 매수 실행!")
                                 try:
-                                    client.place_order("KRX", symbol, "buy", 1, 0, "market")
-                                    cash -= current_price # 가계산
+                                    client.place_order("KRX", symbol, "buy", qty, 0, "market")
+                                    cash -= (current_price * qty) # 가계산
                                     print(f"     ✅ 매수 완료!")
-                                    notifier.send_message(f"🔥 [강력 매수] {name}({symbol})\n점수: {score}점\n매수가: {current_price:,.0f}원\n수량: 1주")
+                                    notifier.send_message(f"🔥 [강력 매수] {name}({symbol})\n점수: {score}점\n매수가: {current_price:,.0f}원\n수량: {qty}주")
                                 except Exception as e:
                                     print(f"     ❌ 매수 에러: {e}")
                                 
