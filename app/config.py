@@ -25,11 +25,14 @@ class Settings:
 
 
 def get_settings() -> Settings:
+    is_paper = os.getenv("KIS_IS_PAPER", "true").lower() == "true"
+    prefix = "MOCK_" if is_paper and os.getenv("MOCK_APP_KEY") else "KIS_"
+
     required_keys = [
-        "KIS_APP_KEY",
-        "KIS_APP_SECRET",
-        "KIS_ACCOUNT_NO",
-        "KIS_ACCOUNT_PRODUCT_CODE",
+        f"{prefix}APP_KEY",
+        f"{prefix}APP_SECRET",
+        f"{prefix}ACCOUNT_NO",
+        f"{prefix}ACCOUNT_PRODUCT_CODE",
     ]
 
     missing_keys = [key for key in required_keys if not os.getenv(key)]
@@ -39,9 +42,9 @@ def get_settings() -> Settings:
         raise RuntimeError(f"환경 변수 설정이 필요합니다: {missing_text}")
 
     return Settings(
-        kis_app_key=os.environ["KIS_APP_KEY"],
-        kis_app_secret=os.environ["KIS_APP_SECRET"],
-        kis_account_no=os.environ["KIS_ACCOUNT_NO"],
-        kis_account_product_code=os.environ["KIS_ACCOUNT_PRODUCT_CODE"],
-        kis_is_paper=os.getenv("KIS_IS_PAPER", "true").lower() == "true",
+        kis_app_key=os.environ[f"{prefix}APP_KEY"],
+        kis_app_secret=os.environ[f"{prefix}APP_SECRET"],
+        kis_account_no=os.environ[f"{prefix}ACCOUNT_NO"],
+        kis_account_product_code=os.environ[f"{prefix}ACCOUNT_PRODUCT_CODE"],
+        kis_is_paper=is_paper,
     )

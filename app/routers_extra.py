@@ -30,3 +30,13 @@ def get_dashboard_extra(symbol: str, exchange: str = "NAS"):
         "order_book": order_book,
         "extra_analysis": extra_analysis
     }
+
+@router.get("/api/account/balance")
+def get_account_balance():
+    client = KisClient(get_settings())
+    try:
+        balance = client.get_balance()
+        return balance
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

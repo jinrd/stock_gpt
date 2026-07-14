@@ -40,6 +40,16 @@ def home():
 def health_check():
     return {"status": "ok"}
 
+import threading
+from bot import run_bot
+
+@app.on_event("startup")
+def startup_event():
+    print("🚀 FastAPI 서버 시작: 백그라운드에서 자동 매매 봇을 가동합니다...")
+    # 데몬 스레드로 실행하여 웹 서버 종료 시 봇도 함께 안전하게 종료되도록 설정
+    bot_thread = threading.Thread(target=run_bot, daemon=True)
+    bot_thread.start()
+
 
 @app.get("/api/config/status")
 def config_status():
@@ -115,11 +125,11 @@ def run_screener(
 
     candidates = [
         {
-            "symbol": stock.get("symb"),
-            "name": stock.get("knam") or stock.get("name") or stock.get("ename"),
-            "price": stock.get("last"),
-            "change_rate": stock.get("rate"),
-            "volume": stock.get("tvol"),
+            "symbol": stock.get("mksc_shrn_iscd") or stock.get("symb"),
+            "name": stock.get("hts_kor_isnm") or stock.get("knam") or stock.get("name") or stock.get("ename"),
+            "price": stock.get("prpr") or stock.get("last"),
+            "change_rate": stock.get("prdy_ctrt") or stock.get("rate"),
+            "volume": stock.get("acml_vol") or stock.get("tvol"),
         }
         for stock in sorted_stocks
     ]
@@ -237,12 +247,12 @@ def get_today_focus(
 
     # 모의투자 API 호출 제한을 고려해 종목별 요청 간격을 둡니다.
     for stock in selected_stocks:
-        symbol = stock.get("symb")
+        symbol = stock.get("mksc_shrn_iscd") or stock.get("symb")
 
         if not symbol:
             continue
 
-        time.sleep(1.1)
+        time.sleep(2.0)
 
         try:
             if exchange == "KRX":
@@ -260,10 +270,10 @@ def get_today_focus(
         focus_stocks.append(
             {
                 "symbol": symbol,
-                "name": stock.get("knam") or stock.get("name") or stock.get("ename"),
-                "current_price": _to_float(stock.get("last")),
-                "change_rate": _to_float(stock.get("rate")),
-                "volume": _to_float(stock.get("tvol")),
+                "name": stock.get("hts_kor_isnm") or stock.get("knam") or stock.get("name") or stock.get("ename"),
+                "current_price": _to_float(stock.get("prpr") or stock.get("last")),
+                "change_rate": _to_float(stock.get("prdy_ctrt") or stock.get("rate")),
+                "volume": _to_float(stock.get("acml_vol") or stock.get("tvol")),
                 "analysis": analysis,
             }
         )

@@ -336,6 +336,7 @@
       <button class="nav-btn active" onclick="switchTab('today-focus')">Today Focus</button>
       <button class="nav-btn" onclick="switchTab('screener')">Screener</button>
       <button class="nav-btn" onclick="switchTab('dashboard')">Analysis Dashboard</button>
+      <button class="nav-btn" onclick="switchTab('portfolio')">Portfolio</button>
     </nav>
   </aside>
 
@@ -510,6 +511,44 @@
       </div>
     </section>
 
+    <!-- TAB 4: Portfolio -->
+    <section id="portfolio" class="view-section">
+      <div id="port-content" style="display:none;">
+        <div class="dashboard-top">
+          <div class="glass-card stat-box">
+            <div class="stat-label">총 자산 (평가금액)</div>
+            <div id="port-total" class="stat-val">-</div>
+          </div>
+          <div class="glass-card stat-box">
+            <div class="stat-label">총 매입금액</div>
+            <div id="port-purchase" class="stat-val">-</div>
+          </div>
+          <div class="glass-card stat-box">
+            <div class="stat-label">총 평가손익</div>
+            <div id="port-profit" class="stat-val">-</div>
+          </div>
+        </div>
+        <div class="glass-card" style="margin-top: 1.5rem;">
+          <h3 style="margin-top:0;">보유 종목</h3>
+          <div style="overflow-x: auto;">
+            <table style="width: 100%; text-align: left; border-collapse: collapse;">
+              <thead>
+                <tr style="border-bottom: 1px solid var(--card-border); color: var(--text-secondary);">
+                  <th style="padding: 1rem;">종목명 (코드)</th>
+                  <th style="padding: 1rem;">보유수량</th>
+                  <th style="padding: 1rem;">매수평균가</th>
+                  <th style="padding: 1rem;">현재가</th>
+                  <th style="padding: 1rem;">평가손익 (수익률)</th>
+                </tr>
+              </thead>
+              <tbody id="port-tbody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <script>
@@ -537,6 +576,10 @@
         document.getElementById('page-title').innerText = 'Screener';
         symbolInput.style.display = 'none';
         document.getElementById('action-btn').innerText = '검색하기';
+      } else if (tabId === 'portfolio') {
+        document.getElementById('page-title').innerText = 'My Portfolio';
+        symbolInput.style.display = 'none';
+        document.getElementById('action-btn').innerText = '계좌 조회';
       } else {
         document.getElementById('page-title').innerText = 'Today Focus';
         symbolInput.style.display = 'none';
@@ -591,6 +634,14 @@
           }
 
           renderDashboard(data);
+        } else if (currentTab === 'portfolio') {
+          document.getElementById('port-content').style.display = 'none';
+          const res = await fetch(`/api/account/balance`);
+          const data = await res.json();
+          if (!res.ok) {
+            throw new Error(data.detail || '계좌 정보를 불러올 수 없습니다.');
+          }
+          renderPortfolio(data);
         }
       } catch (err) {
         console.error(err);
@@ -823,6 +874,46 @@
         }
       });
     }
+
+    function renderPortfolio(data) {
+      document.getElementById('port-content').style.display = 'block';
+      
+      document.getElementById('port-total').innerText = data.total_evaluated_amount.toLocaleString() + '원';
+      document.getElementById('port-purchase').innerText = data.total_purchased_amount.toLocaleString() + '원';
+      
+      const profitEl = document.getElementById('port-profit');
+      profitEl.innerText = `${data.total_profit_loss.toLocaleString()}원 (${data.total_profit_loss_rate}%)`;
+      profitEl.style.color = data.total_profit_loss > 0 ? 'var(--buy-color)' : (data.total_profit_loss < 0 ? 'var(--sell-color)' : 'var(--text-primary)');
+      
+      const tbody = document.getElementById('port-tbody');
+      tbody.innerHTML = '';
+      
+      if (!data.stocks || data.stocks.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-secondary);">보유 중인 종목이 없습니다.</td></tr>';
+        return;
+      }
+      
+      data.stocks.forEach(s => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--card-border)';
+        
+        const color = s.profit_loss > 0 ? 'var(--buy-color)' : (s.profit_loss < 0 ? 'var(--sell-color)' : 'var(--text-primary)');
+        
+        tr.innerHTML = `
+          <td style="padding: 1rem;"><strong>${s.name}</strong> <span style="color:var(--text-secondary); font-size:0.85rem;">(${s.symbol})</span></td>
+          <td style="padding: 1rem;">${s.quantity.toLocaleString()}주</td>
+          <td style="padding: 1rem;">${s.purchase_price.toLocaleString()}원</td>
+          <td style="padding: 1rem;">${s.current_price.toLocaleString()}원</td>
+          <td style="padding: 1rem; color: ${color}; font-weight: 600;">
+            ${s.profit_loss.toLocaleString()}원 (${s.profit_loss_rate}%)
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // 초기 실행
+    executeCurrentTab();
   </script>
 </body>
 </html>

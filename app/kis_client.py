@@ -255,7 +255,14 @@ class KisClient:
             timeout=10,
         )
         if not response.ok:
-            raise KisApiError(f"국내 일봉 조회 실패: HTTP {response.status_code}")
+            error_msg = f"HTTP {response.status_code}"
+            try:
+                err_data = response.json()
+                if "msg1" in err_data:
+                    error_msg += f" - {err_data['msg1']}"
+            except:
+                pass
+            raise KisApiError(f"국내 일봉 조회 실패: {error_msg}")
         
         data: Dict[str, Any] = response.json()
         if data.get("rt_cd") not in (None, "0"):
@@ -447,3 +454,125 @@ class KisClient:
         except Exception as e:
             pass
         return {"asks": [], "bids": []}
+
+    def place_order(
+        self,
+        exchange: str,
+        symbol: str,
+        side: str,
+        quantity: int,
+        price: float,
+        order_type: str = "limit"
+    ) -> Dict[str, Any]:
+        """주식을 매수/매도합니다."""
+        is_krx = (exchange == "KRX")
+        
+        if is_krx:
+            url = f"{self.settings.kis_base_url}/uapi/domestic-stock/v1/trading/order-cash"
+            if self.settings.kis_is_paper:
+                tr_id = "VTTC0802U" if side == "buy" else "VTTC0801U"
+            else:
+                tr_id = "TTTC0802U" if side == "buy" else "TTTC0801U"
+                
+            ord_dvsn = "00" if order_type == "limit" else "01"
+            ord_unpr = str(int(price)) if order_type == "limit" else "0"
+            
+            data = {
+                "CANO": self.settings.kis_account_no,
+                "ACNT_PRDT_CD": self.settings.kis_account_product_code,
+                "PDNO": symbol.upper(),
+                "ORD_DVSN": ord_dvsn,
+                "ORD_QTY": str(quantity),
+                "ORD_UNPR": ord_unpr,
+            }
+        else:
+            url = f"{self.settings.kis_base_url}/uapi/overseas-stock/v1/trading/order"
+            if self.settings.kis_is_paper:
+                tr_id = "VTTT1002U" if side == "buy" else "VTTT1001U"
+            else:
+                tr_id = "JTTT1002U" if side == "buy" else "JTTT1006U"
+                
+            ord_dvsn = "00"
+            if order_type == "market":
+                raise ValueError("해외 주식 시장가 주문은 현재 지정가로만 지원하거나 별도 TR_ID가 필요합니다.")
+                
+            data = {
+                "CANO": self.settings.kis_account_no,
+                "ACNT_PRDT_CD": self.settings.kis_account_product_code,
+                "OVRS_EXCG_CD": exchange,
+                "PDNO": symbol.upper(),
+                "ORD_QTY": str(quantity),
+                "OVRS_ORD_UNPR": str(price),
+                "ORD_SVR_DVSN_CD": "0",
+                "ORD_DVSN": ord_dvsn
+            }
+            
+        headers = self._get_headers(tr_id)
+        
+        # POST 요청
+        response = requests.post(url, headers=headers, json=data, timeout=10)
+        
+        try:
+            result = response.json()
+        except:
+            raise KisApiError(f"주문 응답 파싱 실패: {response.text}")
+            
+        if not response.ok or result.get("rt_cd") != "0":
+            msg = result.get("msg1", "알 수 없는 주문 오류")
+            raise KisApiError(f"주문 실패: {msg}")
+            
+        return result
+
+    def get_balance(self) -> Dict[str, Any]:
+        """국내 주식 잔고를 조회합니다."""
+        url = f"{self.settings.kis_base_url}/uapi/domestic-stock/v1/trading/inquire-balance"
+        tr_id = "VTTC8434R" if self.settings.kis_is_paper else "TTTC8434R"
+        
+        params = {
+            "CANO": self.settings.kis_account_no,
+            "ACNT_PRDT_CD": self.settings.kis_account_product_code,
+            "AFHR_FLPR_YN": "N",
+            "OFL_YN": "",
+            "INQR_DVSN": "02",
+            "UNPR_DVSN": "01",
+            "FUND_STTL_ICLD_YN": "N",
+            "FNCG_AMT_AUTO_RDPT_YN": "N",
+            "PRCS_DVSN": "00",
+            "CTX_AREA_FK100": "",
+            "CTX_AREA_NK100": ""
+        }
+        
+        headers = self._get_headers(tr_id)
+        res = requests.get(url, headers=headers, params=params, timeout=10)
+        
+        if not res.ok:
+            raise KisApiError(f"잔고 조회 실패: HTTP {res.status_code}")
+            
+        data = res.json()
+        if data.get("rt_cd") != "0":
+            raise KisApiError(f"잔고 조회 실패: {data.get('msg1')}")
+            
+        # 총 평가금액 정보
+        summary = data.get("output2", [{}])[0]
+        # 보유 종목 목록
+        stocks = data.get("output1", [])
+        
+        return {
+            "total_evaluated_amount": float(summary.get("tot_evlu_amt", 0)),
+            "total_purchased_amount": float(summary.get("pchs_amt_smtl_amt", 0)),
+            "total_profit_loss": float(summary.get("evlu_pfls_smtl_amt", 0)),
+            "total_profit_loss_rate": float(summary.get("evlu_pfls_rt", 0)),
+            "orderable_cash": float(summary.get("prvs_rcdl_excc_amt", 0)), # D+2 예수금
+            "stocks": [
+                {
+                    "symbol": s.get("pdno"),
+                    "name": s.get("prdt_name"),
+                    "quantity": int(s.get("hldg_qty", 0)),
+                    "purchase_price": float(s.get("pchs_avg_pric", 0)),
+                    "current_price": float(s.get("prpr", 0)),
+                    "profit_loss": float(s.get("evlu_pfls_amt", 0)),
+                    "profit_loss_rate": float(s.get("evlu_pfls_rt", 0)),
+                }
+                for s in stocks if int(s.get("hldg_qty", 0)) > 0
+            ]
+        }
