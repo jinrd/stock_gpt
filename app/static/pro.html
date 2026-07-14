@@ -641,7 +641,7 @@
           renderDashboard(data);
         } else if (currentTab === 'portfolio') {
           document.getElementById('port-content').style.display = 'none';
-          const res = await fetch(`/api/account/balance`);
+          const res = await fetch(`/api/account/balance?exchange=${exchange}`);
           const data = await res.json();
           if (!res.ok) {
             throw new Error(data.detail || '계좌 정보를 불러올 수 없습니다.');

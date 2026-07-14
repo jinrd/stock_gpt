@@ -34,17 +34,24 @@ def get_dashboard_extra(symbol: str, exchange: str = "NAS"):
 from app.analysis import analyze_daily_prices
 
 @router.get("/api/account/balance")
-def get_account_balance():
+def get_account_balance(exchange: str = "KRX"):
     # 봇 전용 모의투자 계좌의 잔고/포트폴리오를 웹에서 확인하기 위해 force_mock=True 사용
     client = KisClient(get_settings(force_mock=True))
     try:
-        balance = client.get_balance()
+        if exchange == "KRX":
+            balance = client.get_balance()
+        else:
+            balance = client.get_nasdaq_balance()
         
         # 보유 종목들에 대해 일봉 조회 후 매도 예상가(목표가) 계산 추가
         for stock in balance.get("stocks", []):
             symbol = stock["symbol"]
             try:
-                prices = client.get_krx_daily_prices(symbol)
+                if exchange == "KRX":
+                    prices = client.get_krx_daily_prices(symbol)
+                else:
+                    prices = client.get_daily_prices("NAS", symbol)
+                    
                 if prices:
                     analysis = analyze_daily_prices(prices)
                     stock["target_price"] = analysis.get("target_price", 0.0)
