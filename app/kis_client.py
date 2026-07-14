@@ -14,25 +14,26 @@ class KisApiError(Exception):
 
 
 class KisClient:
+    _global_rate_lock = Lock()
+    _global_last_api_call_time = 0.0
+
     def __init__(self, settings: Settings):
         self.settings = settings
         self._access_token = None
         self._token_expires_at = 0.0
         self._token_lock = Lock()
-        self._last_api_call_time = 0.0
-        self._rate_lock = Lock()
 
     def _wait_for_rate_limit(self):
         """API 초당 거래건수 초과 에러(HTTP 500) 방지를 위한 전역 딜레이 로직"""
         # 모의투자는 초당 거래건수 초과 에러 방지를 위해 안전하게 1.0초, 실전투자는 0.3초 딜레이
         delay = 1.0 if self.settings.kis_is_paper else 0.3
         
-        with self._rate_lock:
+        with KisClient._global_rate_lock:
             now = time.time()
-            elapsed = now - self._last_api_call_time
+            elapsed = now - KisClient._global_last_api_call_time
             if elapsed < delay:
                 time.sleep(delay - elapsed)
-            self._last_api_call_time = time.time()
+            KisClient._global_last_api_call_time = time.time()
 
     def _request(self, method: str, url: str, **kwargs):
         """requests.get/post 를 감싸서 rate limit을 적용하는 래퍼 함수"""
