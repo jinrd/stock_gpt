@@ -808,6 +808,7 @@
     }
 
     function renderDashboard(data) {
+      const exchange = document.getElementById('global-exchange').value;
       const analysis = data.analysis;
       document.getElementById('dash-content').style.display = 'block';
       document.getElementById('page-title').innerText = `Analysis Dashboard - ${data.name} (${data.symbol})`;
@@ -892,6 +893,7 @@
     function renderPortfolio(data) {
       document.getElementById('port-content').style.display = 'block';
       
+      const exchange = document.getElementById('global-exchange').value;
       const isOverseas = (exchange !== 'KRX');
       const formatCurrency = (val) => {
           if (isOverseas) {
