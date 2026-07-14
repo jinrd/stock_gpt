@@ -9,14 +9,17 @@ os.environ["KIS_IS_PAPER"] = "true"
 from app.config import get_settings
 from app.kis_client import KisClient
 from app.analysis import analyze_daily_prices, analyze_daily_prices_bear_market
+from notifier import TelegramNotifier
 
 def run_bot():
     settings = get_settings()
     client = KisClient(settings)
+    notifier = TelegramNotifier()
     
     print("=" * 50)
     print("🤖 StockPro 자동 매매 봇 작동 시작 (모의투자)")
     print("=" * 50)
+    notifier.send_message("🚀 StockPro 자동 매매 봇이 정상적으로 시작되었습니다. (모의투자)")
     
     while True:
         now = datetime.datetime.now()
@@ -53,14 +56,17 @@ def run_bot():
                 if current_price >= target_price:
                     print(f"  👉 📈 목표가 도달! {name} {qty}주 시장가 매도 실행!")
                     client.place_order("KRX", symbol, "sell", qty, 0, "market")
+                    notifier.send_message(f"📈 [목표가 익절] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
                     time.sleep(1.5)
                 elif current_price <= stop_loss:
                     print(f"  👉 📉 손절가 이탈! {name} {qty}주 시장가 매도 (손절) 실행!")
                     client.place_order("KRX", symbol, "sell", qty, 0, "market")
+                    notifier.send_message(f"📉 [손절가 이탈] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
                     time.sleep(1.5)
                 elif action == "매도 검토":
                     print(f"  👉 ⚠️ 위험 신호 포착! {name} {qty}주 시장가 매도 실행!")
                     client.place_order("KRX", symbol, "sell", qty, 0, "market")
+                    notifier.send_message(f"⚠️ [위험 신호 매도] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
                     time.sleep(1.5)
                 
                 time.sleep(0.5) # API 호출 제한 방지
@@ -117,6 +123,7 @@ def run_bot():
                                     client.place_order("KRX", symbol, "buy", 1, 0, "market")
                                     cash -= current_price # 가계산
                                     print(f"     ✅ 매수 완료!")
+                                    notifier.send_message(f"🔥 [강력 매수] {name}({symbol})\n점수: {score}점\n매수가: {current_price:,.0f}원\n수량: 1주")
                                 except Exception as e:
                                     print(f"     ❌ 매수 에러: {e}")
                                 
@@ -133,6 +140,7 @@ def run_bot():
                     
         except Exception as e:
             print(f"⚠️ 봇 실행 중 에러 발생: {e}")
+            notifier.send_message(f"❗ [시스템 에러]\n봇 실행 중 문제가 발생했습니다.\n내용: {e}")
             
         print("💤 30초 대기 후 다시 모니터링합니다...\n")
         time.sleep(30) # 30초마다 루프 (실전에서는 1~5분 권장)
