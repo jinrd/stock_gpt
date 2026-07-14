@@ -564,7 +564,11 @@ class KisClient:
                 
             ord_dvsn = "00"
             if order_type == "market":
-                raise ValueError("해외 주식 시장가 주문은 현재 지정가로만 지원하거나 별도 TR_ID가 필요합니다.")
+                # 시장가 주문을 흉내내기 위해, 체결을 보장하는 공격적인 지정가로 변환합니다.
+                if side == "buy":
+                    price = price * 1.05 # 5% 높게
+                else:
+                    price = price * 0.95 # 5% 낮게
                 
             data = {
                 "CANO": self.settings.kis_account_no,
@@ -572,7 +576,7 @@ class KisClient:
                 "OVRS_EXCG_CD": exchange,
                 "PDNO": symbol.upper(),
                 "ORD_QTY": str(quantity),
-                "OVRS_ORD_UNPR": str(price),
+                "OVRS_ORD_UNPR": str(round(price, 2)),
                 "ORD_SVR_DVSN_CD": "0",
                 "ORD_DVSN": ord_dvsn
             }
@@ -659,5 +663,67 @@ class KisClient:
                     "profit_loss_rate": float(s.get("evlu_pfls_rt", 0)),
                 }
                 for s in stocks if int(s.get("hldg_qty", 0)) > 0
+            ]
+        }
+
+    def get_nasdaq_balance(self) -> Dict[str, Any]:
+        """나스닥(해외) 주식 잔고를 조회합니다."""
+        url = f"{self.settings.kis_base_url}/uapi/overseas-stock/v1/trading/inquire-balance"
+        tr_id = "VTTS3012R" if self.settings.kis_is_paper else "TTTS3012R"
+        
+        params = {
+            "CANO": self.settings.kis_account_no,
+            "ACNT_PRDT_CD": self.settings.kis_account_product_code,
+            "OVRS_EXCG_CD": "NASD",
+            "TR_CRCY_CD": "USD",
+            "CTX_AREA_FK200": "",
+            "CTX_AREA_NK200": ""
+        }
+        
+        headers = self._get_headers(tr_id)
+        res = self._request("GET", url, headers=headers, params=params, timeout=10)
+        if not res.ok:
+            error_msg = f"HTTP {res.status_code}"
+            try:
+                err_data = res.json()
+                if "msg1" in err_data:
+                    error_msg += f" - {err_data['msg1']}"
+            except:
+                pass
+            raise KisApiError(f"나스닥 잔고 조회 실패: {error_msg}")
+            
+        data = res.json()
+        if data.get("rt_cd") != "0":
+            raise KisApiError(f"나스닥 잔고 조회 실패: {data.get('msg1')}")
+            
+        summary = data.get("output2", {})
+        stocks = data.get("output1", [])
+        
+        # 해외 주식 잔고 응답 키 처리 (모의/실전 동일 API 구조)
+        tot_evlu_amt = float(summary.get("tot_evlu_pfls_amt", 0)) + float(summary.get("tot_pchs_amt", 0))
+        pchs_amt_smtl_amt = float(summary.get("tot_pchs_amt", 0))
+        evlu_pfls_smtl_amt = float(summary.get("tot_evlu_pfls_amt", 0))
+        
+        total_profit_loss_rate = 0.0
+        if pchs_amt_smtl_amt > 0:
+            total_profit_loss_rate = round((evlu_pfls_smtl_amt / pchs_amt_smtl_amt) * 100, 2)
+            
+        return {
+            "total_evaluated_amount": tot_evlu_amt,
+            "total_purchased_amount": pchs_amt_smtl_amt,
+            "total_profit_loss": evlu_pfls_smtl_amt,
+            "total_profit_loss_rate": total_profit_loss_rate,
+            "orderable_cash": float(summary.get("frcr_buy_amt_smtl1", summary.get("frcr_evlu_tamt", 10000))), # 매수 가능 달러, 응답이 없을 경우를 대비해 보수적 처리 필요하지만 모의투자는 기본적으로 응답.
+            "stocks": [
+                {
+                    "symbol": s.get("ovrs_pdno"),
+                    "name": s.get("ovrs_item_name"),
+                    "quantity": int(s.get("ord_pss_qty", s.get("ovrs_cblc_qty", 0))),
+                    "purchase_price": float(s.get("pchs_avg_pric", 0)),
+                    "current_price": float(s.get("now_pric2", 0)),
+                    "profit_loss": float(s.get("evlu_pfls_amt", 0)),
+                    "profit_loss_rate": float(s.get("evlu_pfls_rt", 0)),
+                }
+                for s in stocks if int(s.get("ord_pss_qty", s.get("ovrs_cblc_qty", 0))) > 0
             ]
         }

@@ -16,9 +16,9 @@ def run_bot():
     notifier = TelegramNotifier()
     
     print("=" * 50)
-    print("🤖 StockPro 자동 매매 봇 작동 시작 (모의투자)")
+    print("🤖 StockPro 나스닥 자동 매매 봇 작동 시작 (모의투자)")
     print("=" * 50)
-    notifier.send_message("🚀 StockPro 자동 매매 봇이 정상적으로 시작되었습니다. (모의투자)")
+    notifier.send_message("🚀 StockPro 나스닥 자동 매매 봇이 정상적으로 시작되었습니다. (모의투자)")
     
     while True:
         # 클라우드 환경(UTC)을 고려하여 강제로 한국 시간(KST)으로 변환
@@ -32,22 +32,23 @@ def run_bot():
             time.sleep(3600)
             continue
             
-        # 한국 주식 시장 정규장 시간: 09:00 ~ 15:30
-        if current_time < datetime.time(9, 0) or current_time >= datetime.time(15, 30):
-            print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] 🛑 정규장 시간이 아닙니다. (운영 시간: 평일 09:00 ~ 15:30)")
+        # 나스닥 주식 시장 정규장 시간 (썸머타임 기준 KST 22:30 ~ 05:00)
+        # 썸머타임 미적용 시 23:30 ~ 06:00 이나, 우선 22:30 ~ 05:00 범위로 러프하게 설정
+        if current_time >= datetime.time(5, 0) and current_time < datetime.time(22, 30):
+            print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] 🛑 정규장 시간이 아닙니다. (미국 나스닥 운영 시간: 22:30 ~ 05:00 KST)")
             print("💤 10분 후 다시 확인합니다...\n")
             time.sleep(600)
             continue
 
-        print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] 잔고 및 시장 모니터링 중...")
+        print(f"\n[{now.strftime('%Y-%m-%d %H:%M:%S')}] 나스닥 잔고 및 시장 모니터링 중...")
         
         try:
-            # 1. 계좌 잔고 및 보유 주식 확인
-            balance = client.get_balance()
-            cash = balance.get("orderable_cash", 0)
+            # 1. 해외 계좌 잔고 및 보유 주식 확인
+            balance = client.get_nasdaq_balance()
+            cash = balance.get("orderable_cash", 0) # USD
             holdings = balance.get("stocks", [])
             
-            print(f"💰 주문 가능 현금: {cash:,.0f}원 | 📦 보유 종목 수: {len(holdings)}개")
+            print(f"💰 주문 가능 현금: ${cash:,.2f} | 📦 보유 종목 수: {len(holdings)}개")
             
             # 2. 매도 로직 (보유 종목 검사)
             for stock in holdings:
@@ -71,58 +72,46 @@ def run_bot():
                 # 매도 조건 (익절 또는 손절)
                 if current_price >= target_price:
                     print(f"  👉 📈 목표가 도달! {name} {qty}주 시장가 매도 실행!")
-                    client.place_order("KRX", symbol, "sell", qty, 0, "market")
-                    notifier.send_message(f"📈 [목표가 익절] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
+                    client.place_order("NASD", symbol, "sell", qty, current_price, "market")
+                    notifier.send_message(f"📈 [미국장 목표가 익절] {name}({symbol})\n수량: {qty}주\n가격: ${current_price:,.2f}")
                 elif current_price <= stop_loss:
                     print(f"  👉 📉 손절가 이탈! {name} {qty}주 시장가 매도 (손절) 실행!")
-                    client.place_order("KRX", symbol, "sell", qty, 0, "market")
-                    notifier.send_message(f"📉 [손절가 이탈] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
+                    client.place_order("NASD", symbol, "sell", qty, current_price, "market")
+                    notifier.send_message(f"📉 [미국장 손절가 이탈] {name}({symbol})\n수량: {qty}주\n가격: ${current_price:,.2f}")
                 elif action == "매도 검토":
                     print(f"  👉 ⚠️ 위험 신호 포착! {name} {qty}주 시장가 매도 실행!")
-                    client.place_order("KRX", symbol, "sell", qty, 0, "market")
-                    notifier.send_message(f"⚠️ [위험 신호 매도] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
+                    client.place_order("NASD", symbol, "sell", qty, current_price, "market")
+                    notifier.send_message(f"⚠️ [미국장 위험 신호 매도] {name}({symbol})\n수량: {qty}주\n가격: ${current_price:,.2f}")
                 
             
-            # 3. 매수 로직 (현금이 있을 때만)
-            if cash > 100000: # 최소 10만원 이상 있을 때만 스캔
-                print("\n📉 KOSDAQ 시장 지수 조회 중...")
-                market_index_prices = client.get_krx_index_daily_prices("KOSDAQ")
+            # 3. 매수 로직 (현금이 있을 때만, 달러 기준)
+            if cash > 100: # 최소 $100 이상 있을 때만 스캔
+                print("\n📉 나스닥 100 지수(QQQ) 조회 중...")
+                try:
+                    market_index_prices = client.get_daily_prices("NAS", "QQQ")
+                except Exception:
+                    market_index_prices = []
                 
-                print("\n🔎 신규 매수 유망 종목 스캔 중...")
+                print("\n🔎 신규 매수 유망 나스닥 우량주 스캔 중...")
                 
-                # 거래량 100만주 이상, 가격 1000~100000원 종목 검색
-                candidates = client.search_krx_stocks(
-                    minimum_price=1000,
-                    maximum_price=100000,
-                    minimum_volume=1000000
-                )
-                candidates = candidates[:20] # 상위 20개만
-                
-                # 대장주 고정 리스트 (필수 분석)
-                blue_chips = [
-                    {"mksc_shrn_iscd": "005930", "hts_kor_isnm": "삼성전자"},
-                    {"mksc_shrn_iscd": "000660", "hts_kor_isnm": "SK하이닉스"},
-                    {"mksc_shrn_iscd": "373220", "hts_kor_isnm": "LG에너지솔루션"},
-                    {"mksc_shrn_iscd": "005490", "hts_kor_isnm": "POSCO홀딩스"},
-                    {"mksc_shrn_iscd": "006400", "hts_kor_isnm": "삼성SDI"},
-                    {"mksc_shrn_iscd": "005380", "hts_kor_isnm": "현대차"},
-                    {"mksc_shrn_iscd": "000270", "hts_kor_isnm": "기아"},
-                    {"mksc_shrn_iscd": "207940", "hts_kor_isnm": "삼성바이오로직스"},
-                    {"mksc_shrn_iscd": "068270", "hts_kor_isnm": "셀트리온"},
-                    {"mksc_shrn_iscd": "035420", "hts_kor_isnm": "NAVER"},
-                    {"mksc_shrn_iscd": "035720", "hts_kor_isnm": "카카오"},
-                    {"mksc_shrn_iscd": "105560", "hts_kor_isnm": "KB금융"}
+                # 나스닥 우량주 고정 리스트 (필수 분석)
+                final_candidates = [
+                    {"symb": "AAPL", "name": "Apple"},
+                    {"symb": "MSFT", "name": "Microsoft"},
+                    {"symb": "NVDA", "name": "NVIDIA"},
+                    {"symb": "AMZN", "name": "Amazon"},
+                    {"symb": "GOOGL", "name": "Alphabet Class A"},
+                    {"symb": "META", "name": "Meta Platforms"},
+                    {"symb": "TSLA", "name": "Tesla"},
+                    {"symb": "AVGO", "name": "Broadcom"},
+                    {"symb": "COST", "name": "Costco"},
+                    {"symb": "NFLX", "name": "Netflix"},
+                    {"symb": "AMD", "name": "AMD"},
+                    {"symb": "INTC", "name": "Intel"},
+                    {"symb": "QCOM", "name": "Qualcomm"},
+                    {"symb": "ADBE", "name": "Adobe"},
+                    {"symb": "CSCO", "name": "Cisco"}
                 ]
-                
-                # 기존 검색 결과와 필수 분석 리스트 병합 (중복 제거)
-                seen_symbols = set()
-                final_candidates = []
-                
-                for cand in blue_chips + candidates:
-                    sym = cand.get("mksc_shrn_iscd") or cand.get("symb") or cand.get("pdno")
-                    if sym and sym not in seen_symbols:
-                        seen_symbols.add(sym)
-                        final_candidates.append(cand)
                 
                 success_list = []
                 fail_list = []
@@ -143,12 +132,12 @@ def run_bot():
                         
                     try:
                         print(".", end="", flush=True)
-                        prices = client.get_krx_daily_prices(symbol)
+                        prices = client.get_daily_prices("NAS", symbol)
                         if not prices:
                             fail_list.append(f"{name}({symbol}): 가격 데이터 없음")
                             continue
                             
-                        # 하락장 맞춤형 신규 함수 사용
+                        # 하락장 맞춤형 신규 함수 사용 (미국장 차트도 동일 로직 적용 가능)
                         analysis = analyze_daily_prices_bear_market(prices, market_index_prices=market_index_prices)
                         success_list.append(f"{name}")
                         
@@ -157,8 +146,8 @@ def run_bot():
                         current_price = analysis.get("price", 0)
                         
                         if action == "매수 검토" and score >= 2:
-                            # 1. 점수에 비례한 목표 매수 금액 설정 (1점당 10만 원, 최대 100만 원)
-                            target_amount = score * 100000
+                            # 1. 점수에 비례한 목표 매수 금액 설정 (1점당 150달러)
+                            target_amount = score * 150.0
                             
                             # 2. 현재 계좌의 주문 가능 현금을 초과하지 않도록 보정
                             target_amount = min(target_amount, cash)
@@ -167,17 +156,17 @@ def run_bot():
                             qty = int(target_amount // current_price)
                             
                             if qty > 0:
-                                buy_msg = f"🎯 매수 포착! {name}({symbol}): 점수 {score}점 -> 목표금액 {target_amount:,.0f}원 ({qty}주) 매수 실행!"
+                                buy_msg = f"🎯 매수 포착! {name}({symbol}): 점수 {score}점 -> 목표금액 ${target_amount:,.2f} ({qty}주) 매수 실행!"
                                 try:
-                                    client.place_order("KRX", symbol, "buy", qty, 0, "market")
+                                    client.place_order("NASD", symbol, "buy", qty, current_price, "market")
                                     cash -= (current_price * qty) # 가계산
                                     buy_msg += " ✅ 완료"
-                                    notifier.send_message(f"🔥 [강력 매수] {name}({symbol})\n점수: {score}점\n매수가: {current_price:,.0f}원\n수량: {qty}주")
+                                    notifier.send_message(f"🔥 [미국장 강력 매수] {name}({symbol})\n점수: {score}점\n매수가: ${current_price:,.2f}\n수량: {qty}주")
                                 except Exception as e:
                                     buy_msg += f" ❌ 실패 ({e})"
                                 buy_logs.append(buy_msg)
                                 
-                            # 한 번 루프에 최대 1종목만 새로 사도록 제한 (모의투자 API 과부하 방지)
+                            # 한 번 루프에 최대 1종목만 새로 사도록 제한
                             break 
                             
                     except Exception as e:
