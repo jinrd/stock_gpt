@@ -89,12 +89,14 @@ def run_bot():
                     if any(h["symbol"] == symbol for h in holdings):
                         continue
                         
-                    # API 호출 제한을 막기 위해 2.0초 대기 (모의투자 서버 500 에러 방지)
-                    time.sleep(2.0)
+                    # API 호출 제한을 막기 위해 3.0초 대기 (모의투자 서버 500 에러 완벽 방지)
+                    time.sleep(3.0)
                     
                     try:
+                        print(f"  🔍 분석 중: {name}({symbol}) ...")
                         prices = client.get_krx_daily_prices(symbol)
                         if not prices:
+                            print(f"     ❌ {name}: 가격 데이터를 불러올 수 없습니다.")
                             continue
                             
                         analysis = analyze_daily_prices(prices)
@@ -120,8 +122,8 @@ def run_bot():
                             
                     except Exception as e:
                         print(f"  ⚠️ {name}({symbol}) 분석 중 에러: {e}")
-                        # API 속도 제한에 걸렸을 가능성이 높으므로 3초 휴식 후 다음 종목으로 넘어감
-                        time.sleep(3.0)
+                        # API 속도 제한에 걸렸을 가능성이 높으므로 5초 추가 휴식
+                        time.sleep(5.0)
                         continue
                     
         except Exception as e:

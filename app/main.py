@@ -252,7 +252,7 @@ def get_today_focus(
         if not symbol:
             continue
 
-        time.sleep(2.0)
+        time.sleep(3.0)
 
         try:
             if exchange == "KRX":
