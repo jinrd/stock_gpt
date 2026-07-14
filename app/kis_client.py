@@ -708,13 +708,32 @@ class KisClient:
         total_profit_loss_rate = 0.0
         if pchs_amt_smtl_amt > 0:
             total_profit_loss_rate = round((evlu_pfls_smtl_amt / pchs_amt_smtl_amt) * 100, 2)
+
+        # 실제 주문 가능 달러(USD) 예수금을 가져오기 위해 매수가능금액조회 API 호출
+        cash_url = f"{self.settings.kis_base_url}/uapi/overseas-stock/v1/trading/inquire-psamount"
+        cash_tr_id = "VTTS3007R" if self.settings.kis_is_paper else "TTTS3007R"
+        cash_params = {
+            "CANO": self.settings.kis_account_no,
+            "ACNT_PRDT_CD": self.settings.kis_account_product_code,
+            "OVRS_EXCG_CD": "NASD",
+            "OVRS_ORD_UNPR": "1", # 임의의 단가
+            "ITEM_CD": "AAPL" # 임의의 종목코드 (필수)
+        }
+        
+        cash_headers = self._get_headers(cash_tr_id)
+        cash_res = self._request("GET", cash_url, headers=cash_headers, params=cash_params, timeout=10)
+        
+        orderable_cash = 0.0
+        if cash_res.ok and cash_res.json().get("rt_cd") == "0":
+            cash_data = cash_res.json().get("output", {})
+            orderable_cash = float(cash_data.get("ord_psbl_frcr_amt", 0.0))
             
         return {
             "total_evaluated_amount": tot_evlu_amt,
             "total_purchased_amount": pchs_amt_smtl_amt,
             "total_profit_loss": evlu_pfls_smtl_amt,
             "total_profit_loss_rate": total_profit_loss_rate,
-            "orderable_cash": float(summary.get("frcr_buy_amt_smtl1", summary.get("frcr_evlu_tamt", 10000))), # 매수 가능 달러, 응답이 없을 경우를 대비해 보수적 처리 필요하지만 모의투자는 기본적으로 응답.
+            "orderable_cash": orderable_cash, # 정확한 매수 가능 USD
             "stocks": [
                 {
                     "symbol": s.get("ovrs_pdno"),
