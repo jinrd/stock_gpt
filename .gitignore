@@ -3,6 +3,7 @@
 __pycache__/
 *.pyc
 .kis_token.json
+.kis_token_*.json
 .DS_Store
 test_*.py
 check_*.py
