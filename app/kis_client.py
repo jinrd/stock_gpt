@@ -700,15 +700,6 @@ class KisClient:
         summary = data.get("output2", {})
         stocks = data.get("output1", [])
         
-        # 해외 주식 잔고 응답 키 처리 (모의/실전 동일 API 구조)
-        tot_evlu_amt = float(summary.get("tot_evlu_pfls_amt", 0)) + float(summary.get("tot_pchs_amt", 0))
-        pchs_amt_smtl_amt = float(summary.get("tot_pchs_amt", 0))
-        evlu_pfls_smtl_amt = float(summary.get("tot_evlu_pfls_amt", 0))
-        
-        total_profit_loss_rate = 0.0
-        if pchs_amt_smtl_amt > 0:
-            total_profit_loss_rate = round((evlu_pfls_smtl_amt / pchs_amt_smtl_amt) * 100, 2)
-
         # 실제 주문 가능 달러(USD) 예수금을 가져오기 위해 매수가능금액조회 API 호출
         cash_url = f"{self.settings.kis_base_url}/uapi/overseas-stock/v1/trading/inquire-psamount"
         cash_tr_id = "VTTS3007R" if self.settings.kis_is_paper else "TTTS3007R"
@@ -727,6 +718,18 @@ class KisClient:
         if cash_res.ok and cash_res.json().get("rt_cd") == "0":
             cash_data = cash_res.json().get("output", {})
             orderable_cash = float(cash_data.get("ord_psbl_frcr_amt", 0.0))
+
+        # 해외 주식 잔고 응답 키 처리
+        # frcr_pchs_amt1: 외화 매입 금액, tot_evlu_pfls_amt: 총 평가 손익
+        pchs_amt_smtl_amt = float(summary.get("frcr_pchs_amt1", 0))
+        evlu_pfls_smtl_amt = float(summary.get("tot_evlu_pfls_amt", 0))
+        
+        # 총 자산 = 달러 예수금 + 주식 매입금액 + 주식 평가손익
+        tot_evlu_amt = orderable_cash + pchs_amt_smtl_amt + evlu_pfls_smtl_amt
+        
+        total_profit_loss_rate = 0.0
+        if pchs_amt_smtl_amt > 0:
+            total_profit_loss_rate = round((evlu_pfls_smtl_amt / pchs_amt_smtl_amt) * 100, 2)
             
         return {
             "total_evaluated_amount": tot_evlu_amt,
