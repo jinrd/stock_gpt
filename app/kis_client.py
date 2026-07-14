@@ -24,8 +24,8 @@ class KisClient:
 
     def _wait_for_rate_limit(self):
         """API 초당 거래건수 초과 에러(HTTP 500) 방지를 위한 전역 딜레이 로직"""
-        # 모의투자는 매우 엄격하므로 1.2초, 실전투자는 0.2초 딜레이
-        delay = 1.2 if self.settings.kis_is_paper else 0.2
+        # 모의투자는 초당 2건이므로 0.55초, 실전투자는 초당 10~20건이므로 0.1초 딜레이
+        delay = 0.55 if self.settings.kis_is_paper else 0.3
         
         with self._rate_lock:
             now = time.time()
