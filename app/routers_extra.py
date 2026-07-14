@@ -31,12 +31,28 @@ def get_dashboard_extra(symbol: str, exchange: str = "NAS"):
         "extra_analysis": extra_analysis
     }
 
+from app.analysis import analyze_daily_prices
+
 @router.get("/api/account/balance")
 def get_account_balance():
     # 봇 전용 모의투자 계좌의 잔고/포트폴리오를 웹에서 확인하기 위해 force_mock=True 사용
     client = KisClient(get_settings(force_mock=True))
     try:
         balance = client.get_balance()
+        
+        # 보유 종목들에 대해 일봉 조회 후 매도 예상가(목표가) 계산 추가
+        for stock in balance.get("stocks", []):
+            symbol = stock["symbol"]
+            try:
+                prices = client.get_krx_daily_prices(symbol)
+                if prices:
+                    analysis = analyze_daily_prices(prices)
+                    stock["target_price"] = analysis.get("target_price", 0.0)
+                else:
+                    stock["target_price"] = 0.0
+            except Exception:
+                stock["target_price"] = 0.0
+                
         return balance
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

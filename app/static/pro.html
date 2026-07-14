@@ -542,6 +542,7 @@
                   <th style="padding: 1rem;">보유수량</th>
                   <th style="padding: 1rem;">매수평균가</th>
                   <th style="padding: 1rem;">현재가</th>
+                  <th style="padding: 1rem;">매도 예상가</th>
                   <th style="padding: 1rem;">평가손익 (수익률)</th>
                 </tr>
               </thead>
@@ -896,7 +897,7 @@
       tbody.innerHTML = '';
       
       if (!data.stocks || data.stocks.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--text-secondary);">보유 중인 종목이 없습니다.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-secondary);">보유 중인 종목이 없습니다.</td></tr>';
         return;
       }
       
@@ -905,12 +906,14 @@
         tr.style.borderBottom = '1px solid var(--card-border)';
         
         const color = s.profit_loss > 0 ? 'var(--buy-color)' : (s.profit_loss < 0 ? 'var(--sell-color)' : 'var(--text-primary)');
+        const targetPriceText = s.target_price ? s.target_price.toLocaleString() + '원' : '-';
         
         tr.innerHTML = `
           <td style="padding: 1rem;"><strong>${s.name}</strong> <span style="color:var(--text-secondary); font-size:0.85rem;">(${s.symbol})</span></td>
           <td style="padding: 1rem;">${s.quantity.toLocaleString()}주</td>
           <td style="padding: 1rem;">${s.purchase_price.toLocaleString()}원</td>
           <td style="padding: 1rem;">${s.current_price.toLocaleString()}원</td>
+          <td style="padding: 1rem;">${targetPriceText}</td>
           <td style="padding: 1rem; color: ${color}; font-weight: 600;">
             ${s.profit_loss.toLocaleString()}원 (${s.profit_loss_rate}%)
           </td>
