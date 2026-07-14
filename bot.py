@@ -8,7 +8,7 @@ os.environ["KIS_IS_PAPER"] = "true"
 
 from app.config import get_settings
 from app.kis_client import KisClient
-from app.analysis import analyze_daily_prices
+from app.analysis import analyze_daily_prices, analyze_daily_prices_bear_market
 
 def run_bot():
     settings = get_settings()
@@ -67,6 +67,10 @@ def run_bot():
             
             # 3. 매수 로직 (현금이 있을 때만)
             if cash > 100000: # 최소 10만원 이상 있을 때만 스캔
+                print("\n📉 KOSDAQ 시장 지수 조회 중...")
+                market_index_prices = client.get_krx_index_daily_prices("KOSDAQ")
+                time.sleep(2.0)
+                
                 print("\n🔎 신규 매수 유망 종목 스캔 중...")
                 
                 # 거래량 100만주 이상, 가격 1000~100000원 종목 검색
@@ -99,7 +103,8 @@ def run_bot():
                             print(f"     ❌ {name}: 가격 데이터를 불러올 수 없습니다.")
                             continue
                             
-                        analysis = analyze_daily_prices(prices)
+                        # 하락장 맞춤형 신규 함수 사용
+                        analysis = analyze_daily_prices_bear_market(prices, market_index_prices=market_index_prices)
                         action = analysis.get("action")
                         score = analysis.get("buy_score", 0)
                         current_price = analysis.get("price", 0)

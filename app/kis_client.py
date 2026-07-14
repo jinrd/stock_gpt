@@ -283,6 +283,47 @@ class KisClient:
             })
         return mapped
 
+    def get_krx_index_daily_prices(
+        self,
+        market_type: str = "KOSDAQ",
+    ) -> List[Dict[str, Any]]:
+        import datetime
+        url = f"{self.settings.kis_base_url}/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice"
+        end_date = datetime.datetime.today().strftime('%Y%m%d')
+        start_date = (datetime.datetime.today() - datetime.timedelta(days=150)).strftime('%Y%m%d')
+        
+        iscd = "1001" if market_type.upper() == "KOSDAQ" else "0001"
+        
+        params = {
+            "FID_COND_MRKT_DIV_CODE": "U",
+            "FID_INPUT_ISCD": iscd,
+            "FID_INPUT_DATE_1": start_date,
+            "FID_INPUT_DATE_2": end_date,
+            "FID_PERIOD_DIV_CODE": "D"
+        }
+        response = requests.get(
+            url,
+            headers=self._get_headers("FHKUP03500100"),
+            params=params,
+            timeout=10,
+        )
+        if not response.ok:
+            return []
+        
+        data: Dict[str, Any] = response.json()
+        items = data.get("output2") or []
+        mapped = []
+        for item in items:
+            mapped.append({
+                "xymd": item.get("stck_bsop_date"),
+                "open": item.get("bstp_nmix_oprc"),
+                "high": item.get("bstp_nmix_hgpr"),
+                "low": item.get("bstp_nmix_lwpr"),
+                "clos": item.get("bstp_nmix_prpr"),
+                "tvol": item.get("acml_vol"),
+            })
+        return mapped
+
     def get_stock_name(self, exchange: str, symbol: str) -> str:
         """종목 코드로 종목명을 조회합니다. (KRX는 KIS API, 해외는 Yahoo Finance 활용)"""
         if exchange == "KRX":
@@ -544,9 +585,15 @@ class KisClient:
         
         headers = self._get_headers(tr_id)
         res = requests.get(url, headers=headers, params=params, timeout=10)
-        
         if not res.ok:
-            raise KisApiError(f"잔고 조회 실패: HTTP {res.status_code}")
+            error_msg = f"HTTP {res.status_code}"
+            try:
+                err_data = res.json()
+                if "msg1" in err_data:
+                    error_msg += f" - {err_data['msg1']}"
+            except:
+                pass
+            raise KisApiError(f"잔고 조회 실패: {error_msg}")
             
         data = res.json()
         if data.get("rt_cd") != "0":
