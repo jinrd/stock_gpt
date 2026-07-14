@@ -25,9 +25,10 @@ async def lifespan(app: FastAPI):
         krx_thread = threading.Thread(target=run_krx_bot, daemon=True)
         krx_thread.start()
         
-        nas_thread = threading.Thread(target=run_nasdaq_bot, daemon=True)
-        nas_thread.start()
-        print("✅ 백그라운드 봇(코스피, 나스닥) 스레드가 성공적으로 시작되었습니다.")
+        # 사용자의 요청으로 나스닥 봇은 임시 중단합니다.
+        # nas_thread = threading.Thread(target=run_nasdaq_bot, daemon=True)
+        # nas_thread.start()
+        print("✅ 백그라운드 봇(코스피) 스레드가 성공적으로 시작되었습니다. (나스닥 봇은 중단됨)")
     except Exception as e:
         print(f"⚠️ 백그라운드 봇 시작 실패: {e}")
         
