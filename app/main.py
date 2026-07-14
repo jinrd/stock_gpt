@@ -10,10 +10,34 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+import threading
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 웹 서버 시작 시 백그라운드에서 봇들을 함께 구동합니다.
+    # 이렇게 하면 웹 서버와 봇들이 완전히 동일한 프로세스에서 돌아가므로,
+    # KisClient의 _rate_lock(초당 호출 제한)을 완벽하게 공유하여 HTTP 500 에러를 방지합니다.
+    try:
+        from bot import run_bot as run_krx_bot
+        from bot_nasdaq import run_bot as run_nasdaq_bot
+        
+        krx_thread = threading.Thread(target=run_krx_bot, daemon=True)
+        krx_thread.start()
+        
+        nas_thread = threading.Thread(target=run_nasdaq_bot, daemon=True)
+        nas_thread.start()
+        print("✅ 백그라운드 봇(코스피, 나스닥) 스레드가 성공적으로 시작되었습니다.")
+    except Exception as e:
+        print(f"⚠️ 백그라운드 봇 시작 실패: {e}")
+        
+    yield
+
 app = FastAPI(
     title="Stock Trading GPT",
     description="해외주식 분석 및 자동매매 도구",
     version="0.1.0",
+    lifespan=lifespan
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
