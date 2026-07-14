@@ -56,25 +56,20 @@ def run_bot():
                     print(f"  👉 📈 목표가 도달! {name} {qty}주 시장가 매도 실행!")
                     client.place_order("KRX", symbol, "sell", qty, 0, "market")
                     notifier.send_message(f"📈 [목표가 익절] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
-                    time.sleep(1.5)
                 elif current_price <= stop_loss:
                     print(f"  👉 📉 손절가 이탈! {name} {qty}주 시장가 매도 (손절) 실행!")
                     client.place_order("KRX", symbol, "sell", qty, 0, "market")
                     notifier.send_message(f"📉 [손절가 이탈] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
-                    time.sleep(1.5)
                 elif action == "매도 검토":
                     print(f"  👉 ⚠️ 위험 신호 포착! {name} {qty}주 시장가 매도 실행!")
                     client.place_order("KRX", symbol, "sell", qty, 0, "market")
                     notifier.send_message(f"⚠️ [위험 신호 매도] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
-                    time.sleep(1.5)
                 
-                time.sleep(0.5) # API 호출 제한 방지
             
             # 3. 매수 로직 (현금이 있을 때만)
             if cash > 100000: # 최소 10만원 이상 있을 때만 스캔
                 print("\n📉 KOSDAQ 시장 지수 조회 중...")
                 market_index_prices = client.get_krx_index_daily_prices("KOSDAQ")
-                time.sleep(2.0)
                 
                 print("\n🔎 신규 매수 유망 종목 스캔 중...")
                 
@@ -125,7 +120,6 @@ def run_bot():
                         continue
                         
                     # API 호출 제한을 막기 위해 3.0초 대기 (모의투자 서버 500 에러 완벽 방지)
-                    time.sleep(3.0)
                     
                     try:
                         print(f"  🔍 분석 중: {name}({symbol}) ...")
@@ -160,7 +154,6 @@ def run_bot():
                                 except Exception as e:
                                     print(f"     ❌ 매수 에러: {e}")
                                 
-                                time.sleep(1.5)
                             
                             # 한 번 루프에 최대 1종목만 새로 사도록 제한 (모의투자 API 과부하 방지)
                             break 
@@ -168,7 +161,6 @@ def run_bot():
                     except Exception as e:
                         print(f"  ⚠️ {name}({symbol}) 분석 중 에러: {e}")
                         # API 속도 제한에 걸렸을 가능성이 높으므로 5초 추가 휴식
-                        time.sleep(5.0)
                         continue
                     
         except Exception as e:

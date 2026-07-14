@@ -19,6 +19,33 @@ class KisClient:
         self._access_token = None
         self._token_expires_at = 0.0
         self._token_lock = Lock()
+        self._last_api_call_time = 0.0
+        self._rate_lock = Lock()
+
+    def _wait_for_rate_limit(self):
+        """API 초당 거래건수 초과 에러(HTTP 500) 방지를 위한 전역 딜레이 로직"""
+        # 모의투자는 매우 엄격하므로 1.2초, 실전투자는 0.2초 딜레이
+        delay = 1.2 if self.settings.kis_is_paper else 0.2
+        
+        with self._rate_lock:
+            now = time.time()
+            elapsed = now - self._last_api_call_time
+            if elapsed < delay:
+                time.sleep(delay - elapsed)
+            self._last_api_call_time = time.time()
+
+    def _request(self, method: str, url: str, **kwargs):
+        """requests.get/post 를 감싸서 rate limit을 적용하는 래퍼 함수"""
+        # 야후 파이낸스 등 외부 API는 딜레이 생략 (선택적)
+        if "koreainvestment.com" in url:
+            self._wait_for_rate_limit()
+            
+        if method.upper() == "GET":
+            return self._request("GET", url, **kwargs)
+        elif method.upper() == "POST":
+            return self._request("POST", url, **kwargs)
+        else:
+            raise ValueError(f"지원하지 않는 HTTP 메서드: {method}")
 
     def get_access_token(self) -> str:
         # 토큰 만료 1분 전까지 기존 토큰을 재사용합니다.
@@ -52,7 +79,7 @@ class KisClient:
 
             url = f"{self.settings.kis_base_url}/oauth2/tokenP"
 
-            response = requests.post(
+            response = self._request("POST", 
                 url,
                 headers={"Content-Type": "application/json"},
                 json={
@@ -125,7 +152,7 @@ class KisClient:
             "CO_EN_PRICECUR": str(maximum_price),
         }
 
-        response = requests.get(
+        response = self._request("GET", 
             url,
             headers=self._get_headers("HHDFS76410000"),
             params=params,
@@ -165,7 +192,7 @@ class KisClient:
             "FID_VOL_CNT": "",
             "FID_INPUT_DATE_1": ""
         }
-        response = requests.get(
+        response = self._request("GET", 
             url,
             headers=self._get_headers("FHPST01710000"),
             params=params,
@@ -214,7 +241,7 @@ class KisClient:
             "MODP": "1",
         }
 
-        response = requests.get(
+        response = self._request("GET", 
             url,
             headers=self._get_headers("HHDFS76240000"),
             params=params,
@@ -250,7 +277,7 @@ class KisClient:
             "FID_PERIOD_DIV_CODE": "D",
             "FID_ORG_ADJ_PRC": "1"
         }
-        response = requests.get(
+        response = self._request("GET", 
             url,
             headers=self._get_headers("FHKST03010100"),
             params=params,
@@ -303,7 +330,7 @@ class KisClient:
             "FID_INPUT_DATE_2": end_date,
             "FID_PERIOD_DIV_CODE": "D"
         }
-        response = requests.get(
+        response = self._request("GET", 
             url,
             headers=self._get_headers("FHKUP03500100"),
             params=params,
@@ -344,7 +371,7 @@ class KisClient:
                 for suffix in [".KS", ".KQ"]:
                     url = f"https://query2.finance.yahoo.com/v1/finance/search?q={symbol}{suffix}"
                     headers = {"User-Agent": "Mozilla/5.0"}
-                    res = requests.get(url, headers=headers, timeout=5)
+                    res = self._request("GET", url, headers=headers, timeout=5)
                     if res.ok:
                         quotes = res.json().get('quotes', [])
                         if quotes:
@@ -366,7 +393,7 @@ class KisClient:
             try:
                 url = f"https://query2.finance.yahoo.com/v1/finance/search?q={symbol}"
                 headers = {"User-Agent": "Mozilla/5.0"}
-                res = requests.get(url, headers=headers, timeout=5)
+                res = self._request("GET", url, headers=headers, timeout=5)
                 if res.ok:
                     quotes = res.json().get('quotes', [])
                     if quotes:
@@ -383,7 +410,7 @@ class KisClient:
             try:
                 url = f"https://query2.finance.yahoo.com/v1/finance/search?q={symbol}"
                 headers = {"User-Agent": "Mozilla/5.0"}
-                res = requests.get(url, headers=headers, timeout=3)
+                res = self._request("GET", url, headers=headers, timeout=3)
                 if res.ok:
                     quotes = res.json().get('quotes', [])
                     if quotes:
@@ -401,7 +428,7 @@ class KisClient:
                     "FID_COND_MRKT_DIV_CODE": "J",
                     "FID_INPUT_ISCD": symbol.upper(),
                 }
-                res = requests.get(url, headers=self._get_headers("FHKST01010100"), params=params, timeout=5)
+                res = self._request("GET", url, headers=self._get_headers("FHKST01010100"), params=params, timeout=5)
                 if res.ok and res.json().get("rt_cd") in (None, "0"):
                     data = res.json().get("output", {})
                     # hts_avls: 시가총액 (억 원 단위) -> 조 원, 억 원 포맷팅은 프론트에서 또는 여기서. 일단 float
@@ -422,7 +449,7 @@ class KisClient:
                     "EXCD": exchange,
                     "SYMB": symbol.upper(),
                 }
-                res = requests.get(url, headers=self._get_headers("HHDFS76200200"), params=params, timeout=5)
+                res = self._request("GET", url, headers=self._get_headers("HHDFS76200200"), params=params, timeout=5)
                 if res.ok and res.json().get("rt_cd") in (None, "0"):
                     data = res.json().get("output", {})
                     # tomv: 당일시가총액, mcap: 시가총액
@@ -449,7 +476,7 @@ class KisClient:
                     "FID_COND_MRKT_DIV_CODE": "J",
                     "FID_INPUT_ISCD": symbol.upper(),
                 }
-                res = requests.get(url, headers=self._get_headers("FHKST01010200"), params=params, timeout=5)
+                res = self._request("GET", url, headers=self._get_headers("FHKST01010200"), params=params, timeout=5)
                 if res.ok and res.json().get("rt_cd") in (None, "0"):
                     data = res.json().get("output1", {})
                     asks = []
@@ -476,7 +503,7 @@ class KisClient:
                     "EXCD": exchange,
                     "SYMB": symbol.upper(),
                 }
-                res = requests.get(url, headers=self._get_headers("HHDFS76200100"), params=params, timeout=5)
+                res = self._request("GET", url, headers=self._get_headers("HHDFS76200100"), params=params, timeout=5)
                 if res.ok and res.json().get("rt_cd") in (None, "0"):
                     data = res.json().get("output2", {})
                     asks = []
@@ -553,7 +580,7 @@ class KisClient:
         headers = self._get_headers(tr_id)
         
         # POST 요청
-        response = requests.post(url, headers=headers, json=data, timeout=10)
+        response = self._request("POST", url, headers=headers, json=data, timeout=10)
         
         try:
             result = response.json()
@@ -586,7 +613,7 @@ class KisClient:
         }
         
         headers = self._get_headers(tr_id)
-        res = requests.get(url, headers=headers, params=params, timeout=10)
+        res = self._request("GET", url, headers=headers, params=params, timeout=10)
         if not res.ok:
             error_msg = f"HTTP {res.status_code}"
             try:
