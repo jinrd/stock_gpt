@@ -33,7 +33,8 @@ def get_dashboard_extra(symbol: str, exchange: str = "NAS"):
 
 @router.get("/api/account/balance")
 def get_account_balance():
-    client = KisClient(get_settings())
+    # 봇 전용 모의투자 계좌의 잔고/포트폴리오를 웹에서 확인하기 위해 force_mock=True 사용
+    client = KisClient(get_settings(force_mock=True))
     try:
         balance = client.get_balance()
         return balance
