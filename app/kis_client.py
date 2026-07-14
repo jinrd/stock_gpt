@@ -41,9 +41,9 @@ class KisClient:
             self._wait_for_rate_limit()
             
         if method.upper() == "GET":
-            return self._request("GET", url, **kwargs)
+            return requests.get(url, **kwargs)
         elif method.upper() == "POST":
-            return self._request("POST", url, **kwargs)
+            return requests.post(url, **kwargs)
         else:
             raise ValueError(f"지원하지 않는 HTTP 메서드: {method}")
 
