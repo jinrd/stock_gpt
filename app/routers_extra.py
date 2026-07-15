@@ -32,6 +32,32 @@ def get_dashboard_extra(symbol: str, exchange: str = "NAS"):
     }
 
 from app.analysis import analyze_daily_prices
+from app.backtest import run_backtest
+
+@router.get("/api/risk/status")
+def get_risk_status():
+    """현재 주문 한도와 당일 누적 매수액을 반환합니다."""
+    return KisClient(get_settings()).risk_manager.status()
+
+@router.get("/api/analysis/summary")
+def get_analysis_summary():
+    """오늘 기록된 분석 신호의 분포와 평균 점수를 반환합니다."""
+    return KisClient(get_settings()).risk_manager.analysis_summary()
+
+@router.get("/api/backtest/{symbol}")
+def get_backtest(symbol: str, exchange: str = "KRX", commission_bps: float = 10, slippage_bps: float = 5):
+    if exchange not in {"NAS", "NYS", "AMS", "KRX"}:
+        raise HTTPException(status_code=400, detail="지원하지 않는 거래소입니다.")
+    if not 0 <= commission_bps <= 100 or not 0 <= slippage_bps <= 100:
+        raise HTTPException(status_code=400, detail="수수료와 슬리피지는 0~100bp 범위여야 합니다.")
+    client = KisClient(get_settings())
+    try:
+        prices = client.get_krx_daily_prices(symbol) if exchange == "KRX" else client.get_daily_prices(exchange, symbol)
+        return {"symbol": symbol.upper(), "exchange": exchange,
+                "backtest": run_backtest(prices, commission_bps, slippage_bps),
+                "disclaimer": "과거 성과는 미래 수익을 보장하지 않으며, 세금·호가 단위·체결 실패는 반영되지 않습니다."}
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 @router.get("/api/account/balance")
 def get_account_balance(exchange: str = "KRX"):
@@ -63,4 +89,3 @@ def get_account_balance(exchange: str = "KRX"):
         return balance
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

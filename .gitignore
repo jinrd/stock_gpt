@@ -8,3 +8,4 @@ __pycache__/
 test_*.py
 check_*.py
 *.xlsx
+runtime/

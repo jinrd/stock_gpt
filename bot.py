@@ -46,8 +46,11 @@ def run_bot():
             balance = client.get_balance()
             cash = balance.get("orderable_cash", 0)
             holdings = balance.get("stocks", [])
+            daily_loss_percent = client.risk_manager.update_equity(
+                "KRX", balance.get("total_evaluated_amount", 0)
+            )
             
-            print(f"💰 주문 가능 현금: {cash:,.0f}원 | 📦 보유 종목 수: {len(holdings)}개")
+            print(f"💰 주문 가능 현금: {cash:,.0f}원 | 📦 보유 종목 수: {len(holdings)}개 | 당일 손익: {daily_loss_percent:.2f}%")
             
             # 2. 매도 로직 (보유 종목 검사)
             for stock in holdings:
@@ -71,15 +74,15 @@ def run_bot():
                 # 매도 조건 (익절 또는 손절)
                 if current_price >= target_price:
                     print(f"  👉 📈 목표가 도달! {name} {qty}주 시장가 매도 실행!")
-                    client.place_order("KRX", symbol, "sell", qty, 0, "market")
+                    client.place_order("KRX", symbol, "sell", qty, 0, "market", reference_price=current_price, daily_loss_percent=daily_loss_percent)
                     notifier.send_message(f"📈 [목표가 익절] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
                 elif current_price <= stop_loss:
                     print(f"  👉 📉 손절가 이탈! {name} {qty}주 시장가 매도 (손절) 실행!")
-                    client.place_order("KRX", symbol, "sell", qty, 0, "market")
+                    client.place_order("KRX", symbol, "sell", qty, 0, "market", reference_price=current_price, daily_loss_percent=daily_loss_percent)
                     notifier.send_message(f"📉 [손절가 이탈] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
                 elif action == "매도 검토":
                     print(f"  👉 ⚠️ 위험 신호 포착! {name} {qty}주 시장가 매도 실행!")
-                    client.place_order("KRX", symbol, "sell", qty, 0, "market")
+                    client.place_order("KRX", symbol, "sell", qty, 0, "market", reference_price=current_price, daily_loss_percent=daily_loss_percent)
                     notifier.send_message(f"⚠️ [위험 신호 매도] {name}({symbol})\n수량: {qty}주\n가격: {current_price:,.0f}원")
                 
             
@@ -150,6 +153,7 @@ def run_bot():
                             
                         # 하락장 맞춤형 신규 함수 사용
                         analysis = analyze_daily_prices_bear_market(prices, market_index_prices=market_index_prices)
+                        client.risk_manager.record_analysis("KRX", symbol, analysis)
                         success_list.append(f"{name}")
                         
                         action = analysis.get("action")
@@ -169,7 +173,8 @@ def run_bot():
                             if qty > 0:
                                 buy_msg = f"🎯 매수 포착! {name}({symbol}): 점수 {score}점 -> 목표금액 {target_amount:,.0f}원 ({qty}주) 매수 실행!"
                                 try:
-                                    client.place_order("KRX", symbol, "buy", qty, 0, "market")
+                                    client.risk_manager.assert_portfolio_capacity(len(holdings))
+                                    client.place_order("KRX", symbol, "buy", qty, 0, "market", reference_price=current_price, daily_loss_percent=daily_loss_percent)
                                     cash -= (current_price * qty) # 가계산
                                     buy_msg += " ✅ 완료"
                                     notifier.send_message(f"🔥 [강력 매수] {name}({symbol})\n점수: {score}점\n매수가: {current_price:,.0f}원\n수량: {qty}주")

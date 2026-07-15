@@ -2,11 +2,12 @@ import json
 import os
 import time
 from threading import Lock
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import requests
 
 from app.config import Settings
+from app.risk_manager import RiskManager
 
 
 class KisApiError(Exception):
@@ -22,6 +23,7 @@ class KisClient:
         self._access_token = None
         self._token_expires_at = 0.0
         self._token_lock = Lock()
+        self.risk_manager = RiskManager(settings)
 
     def _wait_for_rate_limit(self):
         """API 초당 거래건수 초과 에러(HTTP 500) 방지를 위한 전역 딜레이 로직"""
@@ -533,10 +535,16 @@ class KisClient:
         side: str,
         quantity: int,
         price: float,
-        order_type: str = "limit"
+        order_type: str = "limit",
+        reference_price: Optional[float] = None,
+        daily_loss_percent: Optional[float] = None,
     ) -> Dict[str, Any]:
         """주식을 매수/매도합니다."""
         is_krx = (exchange == "KRX")
+        safe_price = reference_price if reference_price is not None else price
+        self.risk_manager.assert_order_allowed(
+            exchange, symbol, side, quantity, safe_price, daily_loss_percent
+        )
         
         if is_krx:
             url = f"{self.settings.kis_base_url}/uapi/domestic-stock/v1/trading/order-cash"
@@ -596,6 +604,7 @@ class KisClient:
             msg = result.get("msg1", "알 수 없는 주문 오류")
             raise KisApiError(f"주문 실패: {msg}")
             
+        self.risk_manager.record_order(exchange, symbol, side, quantity, safe_price, result)
         return result
 
     def get_balance(self) -> Dict[str, Any]:

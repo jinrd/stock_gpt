@@ -65,25 +65,16 @@ def home():
 def health_check():
     return {"status": "ok"}
 
-import threading
-from bot import run_bot
-
-@app.on_event("startup")
-def startup_event():
-    print("🚀 FastAPI 서버 시작: 백그라운드에서 자동 매매 봇을 가동합니다...")
-    # 데몬 스레드로 실행하여 웹 서버 종료 시 봇도 함께 안전하게 종료되도록 설정
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-
-
 @app.get("/api/config/status")
 def config_status():
     settings = get_settings()
 
+    risk_status = KisClient(settings).risk_manager.status()
     return {
         "configured": True,
         "mode": "paper" if settings.kis_is_paper else "live",
         "account_last_four_digits": settings.kis_account_no[-4:],
+        "live_trading_enabled": risk_status["live_trading_enabled"],
     }
 
 
