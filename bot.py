@@ -51,6 +51,11 @@ def run_bot():
             )
             
             print(f"💰 주문 가능 현금: {cash:,.0f}원 | 📦 보유 종목 수: {len(holdings)}개 | 당일 손익: {daily_loss_percent:.2f}%")
+            try:
+                reconciliation = client.reconcile_today_orders("KRX")
+                print(f"🧾 주문 대사: 추적 {reconciliation['tracked_orders']}건 / 갱신 {reconciliation['updated_orders']}건")
+            except Exception as error:
+                print(f"⚠️ 주문 대사 보류: {error}")
             
             # 2. 매도 로직 (보유 종목 검사)
             for stock in holdings:
@@ -166,19 +171,19 @@ def run_bot():
                         current_price = analysis.get("price", 0)
                         
                         if action == "매수 검토" and score >= 2:
-                            # 1. 점수에 비례한 목표 매수 금액 설정 (1점당 10만 원, 최대 100만 원)
-                            target_amount = score * 100000
-                            
-                            # 2. 현재 계좌의 주문 가능 현금을 초과하지 않도록 보정
-                            target_amount = min(target_amount, cash)
-                            
-                            # 3. 목표 금액으로 살 수 있는 수량 계산
-                            qty = int(target_amount // current_price)
+                            sizing = client.risk_manager.calculate_position_size(
+                                cash, current_price, analysis.get("stop_loss_price", 0), "KRX"
+                            )
+                            qty = sizing["quantity"]
+                            target_amount = qty * current_price
                             
                             if qty > 0:
                                 buy_msg = f"🎯 매수 포착! {name}({symbol}): 점수 {score}점 -> 목표금액 {target_amount:,.0f}원 ({qty}주) 매수 실행!"
                                 try:
                                     client.risk_manager.assert_portfolio_capacity(len(holdings))
+                                    liquidity = client.risk_manager.assess_liquidity(client.get_order_book("KRX", symbol))
+                                    if not liquidity["allowed"]:
+                                        raise RuntimeError(liquidity["reason"])
                                     client.place_order("KRX", symbol, "buy", qty, 0, "market", reference_price=current_price, daily_loss_percent=daily_loss_percent)
                                     cash -= (current_price * qty) # 가계산
                                     buy_msg += " ✅ 완료"

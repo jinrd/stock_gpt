@@ -617,6 +617,64 @@ class KisClient:
         self.risk_manager.record_order(exchange, symbol, side, quantity, safe_price, result)
         return result
 
+    @staticmethod
+    def _to_int(value: Any) -> int:
+        try:
+            return int(float(str(value or "0").replace(",", "")))
+        except (TypeError, ValueError):
+            return 0
+
+    def get_domestic_order_fills(self, inquiry_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """국내 주식 일별 주문체결조회(VTTC0081R/TTTC0081R) 결과를 정규화합니다."""
+        from datetime import datetime
+        date = inquiry_date or datetime.now().strftime("%Y%m%d")
+        params = {"CANO": self.settings.kis_account_no, "ACNT_PRDT_CD": self.settings.kis_account_product_code,
+                  "INQR_STRT_DT": date, "INQR_END_DT": date, "SLL_BUY_DVSN_CD": "00", "INQR_DVSN": "00",
+                  "PDNO": "", "CCLD_DVSN": "00", "ORD_GNO_BRNO": "", "ODNO": "", "INQR_DVSN_3": "00",
+                  "INQR_DVSN_1": "", "CTX_AREA_FK100": "", "CTX_AREA_NK100": ""}
+        tr_id = "VTTC0081R" if self.settings.kis_is_paper else "TTTC0081R"
+        response = self._request("GET", f"{self.settings.kis_base_url}/uapi/domestic-stock/v1/trading/inquire-daily-ccld",
+                                 headers=self._get_headers(tr_id), params=params, timeout=10)
+        if not response.ok:
+            raise KisApiError(f"국내 주문체결 조회 실패: HTTP {response.status_code}")
+        data = response.json()
+        if data.get("rt_cd") != "0":
+            raise KisApiError(f"국내 주문체결 조회 실패: {data.get('msg1')}")
+        return [self._normalize_fill(item) for item in data.get("output1", [])]
+
+    def get_overseas_order_fills(self, inquiry_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """해외 주식 주문체결조회(VTTS3035R/TTTS3035R) 결과를 정규화합니다."""
+        from datetime import datetime
+        date = inquiry_date or datetime.now().strftime("%Y%m%d")
+        params = {"CANO": self.settings.kis_account_no, "ACNT_PRDT_CD": self.settings.kis_account_product_code,
+                  "PDNO": "", "ORD_STRT_DT": date, "ORD_END_DT": date, "SLL_BUY_DVSN": "00",
+                  "CCLD_NCCS_DVSN": "00", "OVRS_EXCG_CD": "", "SORT_SQN": "DS", "ORD_DT": "",
+                  "ORD_GNO_BRNO": "", "ODNO": "", "CTX_AREA_NK200": "", "CTX_AREA_FK200": ""}
+        tr_id = "VTTS3035R" if self.settings.kis_is_paper else "TTTS3035R"
+        response = self._request("GET", f"{self.settings.kis_base_url}/uapi/overseas-stock/v1/trading/inquire-ccnl",
+                                 headers=self._get_headers(tr_id), params=params, timeout=10)
+        if not response.ok:
+            raise KisApiError(f"해외 주문체결 조회 실패: HTTP {response.status_code}")
+        data = response.json()
+        if data.get("rt_cd") != "0":
+            raise KisApiError(f"해외 주문체결 조회 실패: {data.get('msg1')}")
+        return [self._normalize_fill(item) for item in data.get("output", data.get("output1", []))]
+
+    def _normalize_fill(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        ordered = self._to_int(item.get("ord_qty") or item.get("ord_psbl_qty"))
+        filled = self._to_int(item.get("tot_ccld_qty") or item.get("ccld_qty") or item.get("ft_ccld_qty"))
+        unfilled = self._to_int(item.get("nccs_qty") or item.get("rmn_qty"))
+        status = "filled" if filled > 0 and unfilled == 0 else "partial" if filled > 0 else "pending"
+        return {"order_no": item.get("odno") or item.get("ODNO"), "symbol": item.get("pdno") or item.get("ovrs_pdno"),
+                "ordered_quantity": ordered, "filled_quantity": filled, "unfilled_quantity": unfilled,
+                "status": status, "raw": item}
+
+    def reconcile_today_orders(self, exchange: str) -> Dict[str, Any]:
+        fills = self.get_domestic_order_fills() if exchange == "KRX" else self.get_overseas_order_fills()
+        result = self.risk_manager.reconcile_orders(fills)
+        result["fills"] = fills
+        return result
+
     def get_balance(self) -> Dict[str, Any]:
         """국내 주식 잔고를 조회합니다."""
         url = f"{self.settings.kis_base_url}/uapi/domestic-stock/v1/trading/inquire-balance"

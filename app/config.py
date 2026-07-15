@@ -24,6 +24,8 @@ class Settings:
     max_daily_loss_percent: float
     max_positions: int
     max_daily_buy_orders: int
+    risk_per_trade_percent: float
+    max_spread_percent: float
 
     @property
     def kis_base_url(self) -> str:
@@ -64,4 +66,6 @@ def get_settings(force_mock: bool = False) -> Settings:
         max_daily_loss_percent=float(os.getenv("MAX_DAILY_LOSS_PERCENT", "3")),
         max_positions=int(os.getenv("MAX_POSITIONS", "10")),
         max_daily_buy_orders=int(os.getenv("MAX_DAILY_BUY_ORDERS", "3")),
+        risk_per_trade_percent=float(os.getenv("RISK_PER_TRADE_PERCENT", "1")),
+        max_spread_percent=float(os.getenv("MAX_SPREAD_PERCENT", "1")),
     )
