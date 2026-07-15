@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from app.config import get_settings
 from app.kis_client import KisClient
-from app.analysis import analyze_daily_prices, analyze_daily_prices_bear_market
+from app.analysis import analyze_daily_prices, analyze_daily_prices_by_regime
 from notifier import TelegramNotifier
 
 def run_bot():
@@ -140,8 +140,7 @@ def run_bot():
                             fail_list.append(f"{name}({symbol}): 가격 데이터 없음")
                             continue
                             
-                        # 하락장 맞춤형 신규 함수 사용 (미국장 차트도 동일 로직 적용 가능)
-                        analysis = analyze_daily_prices_bear_market(prices, market_index_prices=market_index_prices)
+                        analysis = analyze_daily_prices_by_regime(prices, market_index_prices=market_index_prices)
                         client.risk_manager.record_analysis("NASD", symbol, analysis)
                         success_list.append(f"{name}")
                         

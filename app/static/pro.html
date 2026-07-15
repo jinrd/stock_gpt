@@ -246,6 +246,57 @@
       gap: 1.5rem;
     }
 
+    .market-summary, .indicator-summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+    }
+    .market-summary strong, .indicator-summary strong {
+      display: block;
+      margin-top: 0.35rem;
+      font-size: 1rem;
+      font-family: var(--font-display);
+    }
+    .detail-item {
+      border-top: 1px solid var(--card-border);
+      padding-top: 0.7rem;
+    }
+    .tooltip-label {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.25rem;
+      cursor: help;
+      border-bottom: 1px dashed rgba(148, 163, 184, 0.7);
+    }
+    .tooltip-label::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      z-index: 10;
+      left: 0;
+      bottom: calc(100% + 0.5rem);
+      width: min(260px, 70vw);
+      padding: 0.65rem 0.75rem;
+      border-radius: 8px;
+      background: #020617;
+      border: 1px solid var(--card-border);
+      color: var(--text-primary);
+      font-size: 0.78rem;
+      font-weight: 400;
+      line-height: 1.45;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(4px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .tooltip-label:hover::after, .tooltip-label:focus::after {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .score-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .score-table th, .score-table td { padding: 0.7rem; text-align: left; border-bottom: 1px solid var(--card-border); }
+    .score-table th { color: var(--text-secondary); font-weight: 500; }
+
     ul {
       padding-left: 1.2rem;
       margin: 0;
@@ -284,29 +335,31 @@
     .loader.active { display: block; }
 
     @media (max-width: 768px) {
-      body { flex-direction: column; }
+      body { flex-direction: column; min-width: 0; }
       .sidebar {
         width: 100%;
         padding: 1rem;
-        flex-direction: row;
-        align-items: center;
-        justify-content: space-between;
+        display: block;
         border-right: none;
         border-bottom: 1px solid var(--card-border);
-        gap: 1rem;
+        gap: 0.75rem;
       }
+      .brand { margin-bottom: 0.75rem; font-size: 1.25rem; }
       .nav-links {
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 0.5rem;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.4rem;
+        width: 100%;
       }
       .nav-btn {
-        padding: 0.5rem 0.8rem;
+        padding: 0.6rem 0.65rem;
         font-size: 0.85rem;
+        text-align: center;
       }
       .main-content {
-        padding: 1rem;
+        padding: 1.25rem 1rem 2rem;
         height: auto;
+        min-width: 0;
       }
       header {
         flex-direction: column;
@@ -317,13 +370,30 @@
       .controls {
         width: 100%;
         flex-direction: column;
+        padding: 0.65rem;
+        gap: 0.6rem;
       }
-      .chart-grid, .dashboard-lists, .dashboard-extra {
+      .controls select, .controls input, .controls button { width: 100%; min-width: 0; }
+      .chart-grid, .dashboard-lists, .dashboard-extra, .market-summary, .indicator-summary {
         grid-template-columns: 1fr !important;
       }
+      .dashboard-top { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem; }
+      .glass-card { padding: 1rem; border-radius: 12px; }
+      .stat-val { font-size: 1.2rem; overflow-wrap: anywhere; }
       .chart-container {
-        height: 250px;
+        height: 230px;
       }
+      .score-table { min-width: 580px; }
+      .tooltip-label::after { left: auto; right: 0; width: min(260px, 80vw); }
+    }
+
+    @media (max-width: 420px) {
+      .main-content { padding: 1rem 0.75rem 1.5rem; }
+      h1.page-title { font-size: 1.3rem; }
+      .dashboard-top { grid-template-columns: 1fr; }
+      .nav-links { grid-template-columns: 1fr 1fr; }
+      .chart-container { height: 210px; }
+      .focus-row { gap: 0.75rem; }
     }
   </style>
 </head>
@@ -415,6 +485,32 @@
           </div>
         </div>
 
+        <div class="glass-card" style="margin-bottom:1.5rem;">
+          <div class="stat-label">오늘 시장 국면</div>
+          <div id="dash-market-regime" class="stat-val" style="margin:0.35rem 0 0.6rem;">-</div>
+          <div id="dash-market-description" style="color:var(--text-secondary); font-size:0.9rem; margin-bottom:1rem;">-</div>
+          <div class="market-summary">
+            <div class="detail-item"><span class="stat-label">기준 지수</span><strong id="dash-market-index">-</strong></div>
+            <div class="detail-item"><span class="stat-label">매수 기준점</span><strong id="dash-market-threshold">-</strong></div>
+            <div class="detail-item"><span class="stat-label">거래량 기준</span><strong id="dash-market-volume">-</strong></div>
+            <div class="detail-item"><span class="stat-label">목표 수익률</span><strong id="dash-market-target">-</strong></div>
+          </div>
+        </div>
+
+        <div class="glass-card" style="margin-bottom:1.5rem;">
+          <h3 style="margin-top:0; font-size:1rem;">종목 분석 상세</h3>
+          <div class="indicator-summary">
+            <div class="detail-item"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="최근 20일과 60일의 평균 종가입니다. 현재가와 두 평균선의 위치·방향으로 단기 및 중기 추세를 판단합니다.">20일선 / 60일선</span><strong id="dash-detail-sma">-</strong></div>
+            <div class="detail-item"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="당일 거래량을 최근 20일 평균 거래량으로 나눈 값입니다. 1보다 크면 평균보다 활발하며, 국면별 기준을 넘으면 신호 신뢰도를 높입니다.">거래량 비율</span><strong id="dash-detail-volume">-</strong></div>
+            <div class="detail-item"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="MACD는 단기·장기 지수이동평균 차이이며 Signal은 그 평균선입니다. MACD가 Signal 위면 단기 모멘텀이 상대적으로 강한 상태입니다.">MACD / Signal</span><strong id="dash-detail-macd">-</strong></div>
+            <div class="detail-item"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="최근 몇 주 동안 주가가 올라가는지, 내려가는지를 보여줍니다. ‘하락 흐름’이면 신규 매수는 더 신중하게 판단합니다.">최근 몇 주 흐름</span><strong id="dash-detail-weekly">-</strong></div>
+            <div class="detail-item"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="ATR은 최근 가격 변동 폭의 평균입니다. 현재가 대비 비율이 높을수록 변동성이 크며, 손절폭과 위험 점수 계산에 사용합니다.">ATR 변동성</span><strong id="dash-detail-atr">-</strong></div>
+            <div class="detail-item"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="현재가가 20일 이동평균선에서 얼마나 떨어져 있는지를 백분율로 표시합니다. 값이 너무 높으면 단기 과열 가능성을 점검합니다.">20일 이격도</span><strong id="dash-detail-disparity">-</strong></div>
+            <div class="detail-item"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="최근 55일 동안 거래량이 가장 많이 쌓인 가격대(Point of Control)입니다. 가격이 이 구간 위에 안착하면 지지, 아래로 이탈하면 저항 가능성을 봅니다.">매물대 POC</span><strong id="dash-detail-poc">-</strong></div>
+            <div class="detail-item"><span class="stat-label tooltip-label" tabindex="0" data-tooltip="오늘 장이 끝난 뒤 확정된 가격으로 분석했는지 알려줍니다. 장중 가격은 계속 바뀌므로 신호가 달라질 수 있습니다.">사용한 가격 데이터</span><strong id="dash-detail-candle">-</strong></div>
+          </div>
+        </div>
+
           <div class="chart-grid">
             <div class="glass-card">
               <h3 style="margin-bottom:0.5rem; color:var(--text-secondary);">가격 및 이동평균선</h3>
@@ -451,6 +547,14 @@
             <h3 style="margin-top:0; font-size:1rem; color:var(--hold-color);">주의 사항</h3>
             <ul id="dash-cautions"></ul>
           </div>
+        </div>
+
+        <div class="glass-card" style="margin-top:1.5rem; overflow-x:auto;">
+          <h3 style="margin-top:0; font-size:1rem;">점수 산정 근거</h3>
+          <table class="score-table">
+            <thead><tr><th>구분</th><th>항목</th><th>점수</th><th>판단 근거</th></tr></thead>
+            <tbody id="dash-score-breakdown"></tbody>
+          </table>
         </div>
         
         <div class="dashboard-extra" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem;">
@@ -810,6 +914,8 @@
     function renderDashboard(data) {
       const exchange = document.getElementById('global-exchange').value;
       const analysis = data.analysis;
+      const indicators = analysis.indicators || {};
+      const market = analysis.market_filter || {};
       document.getElementById('dash-content').style.display = 'block';
       document.getElementById('page-title').innerText = `Analysis Dashboard - ${data.name} (${data.symbol})`;
       
@@ -830,6 +936,57 @@
       document.getElementById('dash-rec-buy').innerText = analysis.recommended_buy_price ? formatCurrency(analysis.recommended_buy_price) : '-';
       document.getElementById('dash-target').innerText = analysis.target_price ? formatCurrency(analysis.target_price) : '-';
       document.getElementById('dash-stoploss').innerText = analysis.stop_loss_price ? formatCurrency(analysis.stop_loss_price) : '-';
+
+      const regimeNames = { bull: '상승장', normal: '일반·횡보장', bear: '하락·방어장' };
+      document.getElementById('dash-market-regime').innerText = regimeNames[analysis.market_regime] || '시장 국면 확인 중';
+      document.getElementById('dash-market-regime').className = 'stat-val ' + (analysis.market_regime === 'bull' ? 'val-buy' : analysis.market_regime === 'bear' ? 'val-sell' : 'val-hold');
+      document.getElementById('dash-market-description').innerText = market.description || '시장 지수 데이터가 충분하지 않아 일반장 기준을 적용합니다.';
+      document.getElementById('dash-market-index').innerText = market.reference_index || '-';
+      document.getElementById('dash-market-threshold').innerText = market.required_buy_score ? `${market.required_buy_score}점 이상` : '-';
+      document.getElementById('dash-market-volume').innerText = market.volume_surge_ratio ? `${market.volume_surge_ratio}배 이상` : '-';
+      document.getElementById('dash-market-target').innerText = market.target_return_percent ? `+${market.target_return_percent}%` : '-';
+
+      const formatValue = (value) => value === null || value === undefined ? '-' : Number(value).toLocaleString(undefined, {maximumFractionDigits: 2});
+      document.getElementById('dash-detail-sma').innerText = `${formatValue(indicators.sma_20)} / ${formatValue(indicators.sma_60)}`;
+      document.getElementById('dash-detail-volume').innerText = indicators.volume_ratio ? `${indicators.volume_ratio}배` : '-';
+      document.getElementById('dash-detail-macd').innerText = `${indicators.macd ?? '-'} / ${indicators.macd_signal ?? '-'}`;
+      const weeklyLabels = {
+        bullish: '상승 흐름', bearish: '하락 흐름', neutral: '방향이 뚜렷하지 않음', insufficient_data: '판단할 데이터 부족'
+      };
+      const candleLabels = {
+        completed: '장 마감 후 확정 데이터', incomplete_included: '장중 변동 중인 데이터 포함', incomplete_filtered: '장중 변동 중인 데이터 제외'
+      };
+      document.getElementById('dash-detail-weekly').innerText = weeklyLabels[analysis.weekly_trend?.status] || '판단할 데이터 부족';
+      document.getElementById('dash-detail-atr').innerText = indicators.atr_percent ? `${indicators.atr_percent}%` : '-';
+      document.getElementById('dash-detail-disparity').innerText = indicators.disparity_20 ? `${indicators.disparity_20}%` : '-';
+      document.getElementById('dash-detail-poc').innerText = formatValue(indicators.volume_profile_poc);
+      document.getElementById('dash-detail-candle').innerText = candleLabels[analysis.candle_status] || '확인할 수 없음';
+
+      const scoreBody = document.getElementById('dash-score-breakdown');
+      scoreBody.innerHTML = '';
+      const typeNames = { buy: '매수', sell_risk: '위험', caution: '주의' };
+      const signalNames = {
+        price_above_sma20: '현재가 20일선 상회', price_below_sma20: '현재가 20일선 하회',
+        sma20_above_sma60_rising: '20일선 정배열·상승', weak_medium_trend: '중기 추세 약화',
+        price_below_sma60: '현재가 60일선 이탈', volume_surge: '거래량 급증', low_volume: '거래량 부족',
+        macd_above_signal: 'MACD 상승 모멘텀', macd_below_signal: 'MACD 하락 모멘텀',
+        rsi_momentum: 'RSI 상승 구간', rsi_overbought: 'RSI 과열', rsi_reversal: 'RSI 과열 반전', rsi_oversold: 'RSI 과매도',
+        resistance55_breakout: '55일 전고점 돌파', resistance20_breakout: '20일 저항선 돌파',
+        bb_overheated: '볼린저 상단 과열', bb_overheated_risk: '볼린저 상단 돌파 위험',
+        support20_breakdown: '20일 지지선 이탈', high_volatility: 'ATR 고변동성',
+        poc_breakout: '최대 매물대 돌파', poc_hold_above: '매물대 상단 유지', poc_breakdown: '매물대 하단 이탈',
+        disparity_caution: '이격도 주의', disparity_overheated_penalty: '이격도 과열 감점', disparity_overheated: '이격도 과열 위험',
+        weekly_bullish: '주봉 상승 추세', weekly_bearish: '주봉 약세 추세', weekly_neutral: '주봉 횡보 추세', weekly_insufficient: '주봉 데이터 부족'
+      };
+      (analysis.score_breakdown || []).forEach(item => {
+        const row = document.createElement('tr');
+        [typeNames[item.type] || item.type, signalNames[item.name] || item.name, item.delta > 0 ? `+${item.delta}` : item.delta, item.reason].forEach(value => {
+          const cell = document.createElement('td');
+          cell.textContent = value;
+          row.appendChild(cell);
+        });
+        scoreBody.appendChild(row);
+      });
 
       renderList('dash-reasons', analysis.reasons, '뚜렷한 긍정 신호가 없습니다.');
       renderList('dash-sell-signals', analysis.sell_signals, '감지된 위험 신호가 없습니다.');

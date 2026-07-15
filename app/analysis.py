@@ -1,6 +1,6 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 @dataclass
 class StrategyConfig:
@@ -16,6 +16,22 @@ class StrategyConfig:
     buy_min_score: int = 5
     sell_risk_score: int = 3
     max_stop_loss_percent: float = 10.0
+
+
+@dataclass(frozen=True)
+class MarketRegime:
+    name: str
+    required_buy_score: int
+    volume_surge_ratio: float
+    target_return_percent: float
+    description: str
+
+
+REGIME_SETTINGS = {
+    "bull": MarketRegime("bull", 5, 1.5, 10.0, "지수가 20일·60일선 위에서 상승하는 상승장"),
+    "normal": MarketRegime("normal", 6, 2.0, 7.0, "추세가 뚜렷하지 않은 일반·횡보장"),
+    "bear": MarketRegime("bear", 7, 2.5, 5.0, "지수가 20일선 아래에 있는 하락·방어장"),
+}
 
 def _to_number(value: Any) -> float:
     if value is None or value == "":
@@ -100,6 +116,61 @@ def _create_indicator_frame(daily_prices: List[Dict[str, Any]]) -> pd.DataFrame:
     frame["disparity_20"] = (frame["close"] / frame["sma_20"]) * 100
 
     return frame
+
+
+def detect_market_regime(market_index_prices: Optional[List[Dict[str, Any]]]) -> MarketRegime:
+    """시장 지수의 추세로 상승장·일반장·하락장을 분류합니다."""
+    if not market_index_prices or len(market_index_prices) < 60:
+        return REGIME_SETTINGS["normal"]
+    frame = _create_indicator_frame(market_index_prices)
+    latest = frame.iloc[-1]
+    if pd.isna(latest["sma_20"]) or pd.isna(latest["sma_60"]):
+        return REGIME_SETTINGS["normal"]
+    # 5일간 0.3% 이상 기울기를 요구해 미세한 횡보를 상승장으로 오인하지 않습니다.
+    if latest["close"] > latest["sma_20"] > latest["sma_60"] and latest["sma_20_slope_5d"] >= 0.3:
+        return REGIME_SETTINGS["bull"]
+    if latest["close"] < latest["sma_20"] and (latest["sma_20"] < latest["sma_60"] or latest["sma_20_slope_5d"] <= -0.3):
+        return REGIME_SETTINGS["bear"]
+    return REGIME_SETTINGS["normal"]
+
+
+def select_defensive_market_index(index_prices: Dict[str, List[Dict[str, Any]]]) -> Tuple[str, List[Dict[str, Any]]]:
+    """시장 구분을 모를 때 KOSPI·KOSDAQ 중 더 보수적인 시장 국면을 선택합니다."""
+    if not index_prices:
+        return "UNKNOWN", []
+    rank = {"bull": 0, "normal": 1, "bear": 2}
+    return max(index_prices.items(), key=lambda item: rank[detect_market_regime(item[1]).name])
+
+
+def analyze_daily_prices_by_regime(
+    daily_prices: List[Dict[str, Any]],
+    market_index_prices: Optional[List[Dict[str, Any]]] = None,
+    config: Optional[StrategyConfig] = None,
+) -> Dict[str, Any]:
+    """시장 국면에 맞는 동일한 기술지표 분석을 실행하고 판단 근거를 함께 반환합니다."""
+    regime = detect_market_regime(market_index_prices)
+    base_config = config or StrategyConfig()
+    regime_config = replace(
+        base_config,
+        buy_min_score=regime.required_buy_score,
+        volume_surge_ratio=regime.volume_surge_ratio,
+    )
+    if regime.name == "bear":
+        result = analyze_daily_prices_bear_market(daily_prices, market_index_prices, regime_config)
+    else:
+        result = analyze_daily_prices(daily_prices, regime_config)
+        # 일반장은 7%, 상승장은 10% 이상을 목표로 하되 저항선보다 멀리 잡지 않습니다.
+        current_price = result.get("price")
+        if current_price:
+            result["target_price"] = _round_or_none(current_price * (1 + regime.target_return_percent / 100))
+    result["market_regime"] = regime.name
+    result["market_filter"] = {
+        "required_buy_score": regime.required_buy_score,
+        "volume_surge_ratio": regime.volume_surge_ratio,
+        "target_return_percent": regime.target_return_percent,
+        "description": regime.description,
+    }
+    return result
 
 
 def _calculate_volume_profile(frame: pd.DataFrame, config: StrategyConfig) -> Dict[str, Any]:
@@ -367,6 +438,7 @@ def analyze_daily_prices(
 
     if latest["close"] > latest["bb_upper"]:
         add_score("caution", "bb_overheated", 0, "볼린저 밴드 상단 위로 올라 단기 과열을 확인해야 합니다.")
+        add_score("sell_risk", "bb_overheated_risk", 1, "볼린저 밴드 상단 돌파로 단기 과열 위험이 있습니다.")
 
     # [5] 지지선 이탈 및 변동성 위험
     if pd.notna(latest["support_20"]) and latest["close"] < latest["support_20"]:
@@ -692,6 +764,7 @@ def analyze_daily_prices_bear_market(
 
     if latest["close"] > latest["bb_upper"]:
         add_score("caution", "bb_overheated", 0, "볼린저 밴드 상단 위로 올라 단기 과열을 확인해야 합니다.")
+        add_score("sell_risk", "bb_overheated_risk", 1, "볼린저 밴드 상단 돌파로 단기 과열 위험이 있습니다.")
 
     # [5] 지지선 이탈 및 변동성 위험
     if pd.notna(latest["support_20"]) and latest["close"] < latest["support_20"]:
@@ -713,7 +786,7 @@ def analyze_daily_prices_bear_market(
         poc_hold_above = bool(previous["close"] > poc_high and latest["close"] > poc_high)
         poc_breakdown = bool(previous["close"] >= poc_low and latest["close"] < poc_low)
         
-        if poc_breakout and latest["volume_ratio"] >= config.volume_surge_ratio:
+        if poc_breakout and latest["volume_ratio"] >= 2.5:
             add_score("buy", "poc_breakout", 1, "최대 매물대(POC)를 대량 거래량과 함께 신규 상향 돌파했습니다.")
         elif poc_hold_above:
             add_score("caution", "poc_hold_above", 0, "최대 매물대(POC) 위에 안착하여 추세를 유지 중입니다.")
@@ -743,7 +816,7 @@ def analyze_daily_prices_bear_market(
         add_score("caution", "weekly_insufficient", 0, "주봉 데이터가 부족해 추세 확인을 제외했습니다.")
         weekly_pass = True # 데이터가 없으면 일단 통과 (선택)
     else:
-        add_score("sell_risk", "weekly_bearish", 99, "주봉 5주선 아래에 위치하므로 매수 검토 대상에서 즉시 제외합니다.")
+        add_score("caution", "weekly_bearish", 0, "주봉 5주선 아래에 위치해 신규 매수 대상에서 제외합니다.")
         weekly_pass = False
 
     # 총합 계산 (기존 반환값 호환 유지)
@@ -770,11 +843,11 @@ def analyze_daily_prices_bear_market(
     # buy_score 음수 방지
     buy_score = max(0, buy_score)
 
-    if sell_risk_score >= config.sell_risk_score:
-        action = "매도 검토"
-    elif not weekly_pass:
+    if not weekly_pass:
         action = "관망"
-        buy_score = 0 # 강제 0점 처리
+        buy_score = 0
+    elif sell_risk_score >= config.sell_risk_score:
+        action = "매도 검토"
     elif buy_score >= buy_score_threshold and sell_risk_score <= 1:
         action = "매수 검토"
     else:

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 from app.config import get_settings
 from app.kis_client import KisClient
-from app.analysis import analyze_daily_prices, analyze_daily_prices_bear_market
+from app.analysis import analyze_daily_prices, analyze_daily_prices_by_regime, detect_market_regime, select_defensive_market_index
 from notifier import TelegramNotifier
 
 def run_bot():
@@ -88,8 +88,14 @@ def run_bot():
             
             # 3. 매수 로직 (현금이 있을 때만)
             if cash > 100000: # 최소 10만원 이상 있을 때만 스캔
-                print("\n📉 KOSDAQ 시장 지수 조회 중...")
-                market_index_prices = client.get_krx_index_daily_prices("KOSDAQ")
+                print("\n📉 KOSPI·KOSDAQ 시장 지수 조회 중...")
+                index_prices = {
+                    "KOSPI": client.get_krx_index_daily_prices("KOSPI"),
+                    "KOSDAQ": client.get_krx_index_daily_prices("KOSDAQ"),
+                }
+                # 모의투자에서는 종목 시장구분 API가 지원되지 않아 두 지수 중 더 보수적인 국면을 적용합니다.
+                market_name, market_index_prices = select_defensive_market_index(index_prices)
+                print(f"  적용 시장 기준: {market_name} ({detect_market_regime(market_index_prices).name})")
                 
                 print("\n🔎 신규 매수 유망 종목 스캔 중...")
                 
@@ -151,8 +157,7 @@ def run_bot():
                             fail_list.append(f"{name}({symbol}): 가격 데이터 없음")
                             continue
                             
-                        # 하락장 맞춤형 신규 함수 사용
-                        analysis = analyze_daily_prices_bear_market(prices, market_index_prices=market_index_prices)
+                        analysis = analyze_daily_prices_by_regime(prices, market_index_prices=market_index_prices)
                         client.risk_manager.record_analysis("KRX", symbol, analysis)
                         success_list.append(f"{name}")
                         
