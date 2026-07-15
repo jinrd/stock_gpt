@@ -104,11 +104,21 @@ class KisClient:
             if not access_token:
                 raise KisApiError("응답에 access_token이 없습니다.")
 
-            # KIS 응답의 expires_in 값을 사용합니다.
-            expires_in = int(data.get("expires_in", 3600))
+            # KIS 응답의 expires_in은 기존 토큰 재발급 시에도 항상 86400을 리턴하는 버그가 있으므로,
+            # access_token_token_expired (KST 기준) 값을 파싱하여 정확한 만료 시간을 계산해야 합니다.
+            import datetime
+            expire_str = data.get("access_token_token_expired")
+            if expire_str:
+                try:
+                    dt = datetime.datetime.strptime(expire_str, "%Y-%m-%d %H:%M:%S")
+                    utc_dt = dt - datetime.timedelta(hours=9)
+                    self._token_expires_at = utc_dt.replace(tzinfo=datetime.timezone.utc).timestamp()
+                except Exception:
+                    self._token_expires_at = time.time() + int(data.get("expires_in", 3600))
+            else:
+                self._token_expires_at = time.time() + int(data.get("expires_in", 3600))
 
             self._access_token = access_token
-            self._token_expires_at = time.time() + expires_in
 
             try:
                 with open(token_file, "w") as f:
