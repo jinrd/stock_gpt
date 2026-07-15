@@ -26,6 +26,8 @@ class Settings:
     max_daily_buy_orders: int
     risk_per_trade_percent: float
     max_spread_percent: float
+    kis_paper_request_interval_seconds: float
+    kis_live_request_interval_seconds: float
 
     @property
     def kis_base_url(self) -> str:
@@ -68,4 +70,6 @@ def get_settings(force_mock: bool = False) -> Settings:
         max_daily_buy_orders=int(os.getenv("MAX_DAILY_BUY_ORDERS", "3")),
         risk_per_trade_percent=float(os.getenv("RISK_PER_TRADE_PERCENT", "1")),
         max_spread_percent=float(os.getenv("MAX_SPREAD_PERCENT", "1")),
+        kis_paper_request_interval_seconds=float(os.getenv("KIS_PAPER_REQUEST_INTERVAL_SECONDS", "1.5")),
+        kis_live_request_interval_seconds=float(os.getenv("KIS_LIVE_REQUEST_INTERVAL_SECONDS", "0.5")),
     )

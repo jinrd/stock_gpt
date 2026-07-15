@@ -17,6 +17,7 @@ class KisApiError(Exception):
 class KisClient:
     _global_rate_lock = Lock()
     _global_last_api_call_time = 0.0
+    _global_cooldown_until = 0.0
 
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -27,28 +28,48 @@ class KisClient:
 
     def _wait_for_rate_limit(self):
         """API 초당 거래건수 초과 에러(HTTP 500) 방지를 위한 전역 딜레이 로직"""
-        # 모의투자는 초당 거래건수 초과 에러 방지를 위해 안전하게 1.0초, 실전투자는 0.3초 딜레이
-        delay = 1.0 if self.settings.kis_is_paper else 0.3
+        # 모의투자는 KIS 서버의 시간 구간 오차까지 고려해 1.5초를 기본값으로 둡니다.
+        delay = (self.settings.kis_paper_request_interval_seconds if self.settings.kis_is_paper
+                 else self.settings.kis_live_request_interval_seconds)
         
         with KisClient._global_rate_lock:
             now = time.time()
-            elapsed = now - KisClient._global_last_api_call_time
-            if elapsed < delay:
-                time.sleep(delay - elapsed)
+            next_allowed_at = max(
+                KisClient._global_last_api_call_time + delay,
+                KisClient._global_cooldown_until,
+            )
+            if now < next_allowed_at:
+                time.sleep(next_allowed_at - now)
             KisClient._global_last_api_call_time = time.time()
 
+    @staticmethod
+    def _is_rate_limit_response(response: requests.Response) -> bool:
+        return response.status_code == 500 and "초당 거래건수" in response.text
+
     def _request(self, method: str, url: str, **kwargs):
-        """requests.get/post 를 감싸서 rate limit을 적용하는 래퍼 함수"""
-        # 야후 파이낸스 등 외부 API는 딜레이 생략 (선택적)
-        if "koreainvestment.com" in url:
-            self._wait_for_rate_limit()
-            
-        if method.upper() == "GET":
-            return requests.get(url, **kwargs)
-        elif method.upper() == "POST":
-            return requests.post(url, **kwargs)
-        else:
+        """KIS 요청을 직렬화하고, 안전한 조회(GET)만 제한 초과 시 재시도합니다."""
+        method = method.upper()
+        if method not in {"GET", "POST"}:
             raise ValueError(f"지원하지 않는 HTTP 메서드: {method}")
+        is_kis = "koreainvestment.com" in url
+        # 주문 POST는 응답 유실 뒤 재시도하면 중복 주문이 될 수 있어 절대 자동 재시도하지 않습니다.
+        attempts = 3 if is_kis and method == "GET" else 1
+        response = None
+        for attempt in range(attempts):
+            if is_kis:
+                self._wait_for_rate_limit()
+            response = requests.get(url, **kwargs) if method == "GET" else requests.post(url, **kwargs)
+            if not is_kis or not self._is_rate_limit_response(response) or attempt == attempts - 1:
+                return response
+            backoff_seconds = 2 ** (attempt + 1)  # 2초, 4초 후 재시도
+            with KisClient._global_rate_lock:
+                KisClient._global_last_api_call_time = time.time()
+                KisClient._global_cooldown_until = max(
+                    KisClient._global_cooldown_until,
+                    KisClient._global_last_api_call_time + backoff_seconds,
+                )
+            time.sleep(backoff_seconds)
+        return response
 
     def get_access_token(self) -> str:
         # 토큰 만료 1분 전까지 기존 토큰을 재사용합니다.
