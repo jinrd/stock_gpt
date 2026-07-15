@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from functools import lru_cache
 from app.config import get_settings
 from app.kis_client import KisApiError, KisClient
-from app.analysis import analyze_daily_prices, build_chart_data
+from app.analysis import analyze_daily_prices, analyze_daily_prices_by_regime, build_chart_data, select_defensive_market_index
 import time
 from typing import Any, Dict
 from pathlib import Path
@@ -181,7 +181,16 @@ def analyze_stock(symbol: str, exchange: str = "NAS"):
                 exchange=exchange,
                 symbol=symbol,
             )
-        analysis = analyze_daily_prices(daily_prices)
+        if exchange == "KRX":
+            market_name, market_prices = select_defensive_market_index({
+                "KOSPI": client.get_krx_index_daily_prices("KOSPI"),
+                "KOSDAQ": client.get_krx_index_daily_prices("KOSDAQ"),
+            })
+        else:
+            market_prices = client.get_daily_prices("NAS", "QQQ")
+            market_name = "QQQ"
+        analysis = analyze_daily_prices_by_regime(daily_prices, market_prices)
+        analysis["market_filter"]["reference_index"] = market_name
     except KisApiError as error:
         raise HTTPException(status_code=502, detail=str(error)) from error
     except ValueError as error:
@@ -371,7 +380,16 @@ def get_dashboard_data(symbol: str, exchange: str = "NAS"):
                 exchange=exchange,
                 symbol=symbol,
             )
-        analysis = analyze_daily_prices(daily_prices)
+        if exchange == "KRX":
+            market_name, market_prices = select_defensive_market_index({
+                "KOSPI": client.get_krx_index_daily_prices("KOSPI"),
+                "KOSDAQ": client.get_krx_index_daily_prices("KOSDAQ"),
+            })
+        else:
+            market_prices = client.get_daily_prices("NAS", "QQQ")
+            market_name = "QQQ"
+        analysis = analyze_daily_prices_by_regime(daily_prices, market_prices)
+        analysis["market_filter"]["reference_index"] = market_name
         chart = build_chart_data(daily_prices)
         name = client.get_stock_name(exchange=exchange, symbol=symbol)
     except KisApiError as error:
@@ -387,10 +405,6 @@ def get_dashboard_data(symbol: str, exchange: str = "NAS"):
         "chart": chart,
     }
 
-
-@app.get("/dashboard")
-def dashboard():
-    return FileResponse(STATIC_DIR / "index.html")
 
 # 크롬 개발자 도구가 자동으로 요청하는 경로. 404 로그가 남는 것을 방지하기 위해 더미 응답 추가
 @app.get("/.well-known/appspecific/com.chrome.devtools.json", include_in_schema=False)
